@@ -5,4 +5,5 @@ import logging
 from pathlib import Path
 
 class Evaluator:
-    pass
+    def __init__(self):
+        pass
