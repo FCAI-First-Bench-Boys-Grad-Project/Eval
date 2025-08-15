@@ -19,10 +19,10 @@ def parse_args() -> CLIArgs:
     parser.add_argument("--dataset", required=True, help="Dataset name, e.g. swde or websrc") # Maybe add all?
     parser.add_argument("--pipeline-path", type=Path, required=True, help="Path to pipeline Python file")
     parser.add_argument("--pipeline-class", default="Pipeline", help="Pipeline class name")
-    parser.add_argument("--output-dir", type=Path, default=None, help="Directory to save results") # Might not need it if we are going to use mlflow
-    parser.add_argument("--limit", type=int, default=None, help="Limit number of samples")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--batch-size", type=int, default=1, help="Batch size for processing")
+    parser.add_argument("--output-dir", type=Path, default=None, help="Directory to save results") # will work on this durint he evaluator
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of samples") # Data ?
+    parser.add_argument("--seed", type=int, default=42, help="Random seed") # TODO: I need to know exactly how this is used in the code
+    parser.add_argument("--batch-size", type=int, default=1, help="Batch size for processing") # Data and Pipeline
 
     args = parser.parse_args()
 
