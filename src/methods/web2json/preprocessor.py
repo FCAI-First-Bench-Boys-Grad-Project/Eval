@@ -22,7 +22,7 @@ class BasePreprocessor:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         self.config = config or {}
-        self.keep_tags = bool(self.config.get("keep_tags", False))
+        self.keep_tags = bool(self.config.get("keep_tags", True))
         self.strip_attrs = bool(self.config.get("strip_attrs", True))
         self.strip_links = bool(self.config.get("strip_links", True))
         self.extra_remove_tags = list(self.config.get("extra_remove_tags", ["header", "footer"]))
@@ -89,12 +89,12 @@ def _chunk_worker(args: Tuple[str, int, int, int, str]):
     cleaned_text = BasePreprocessor()._clean_html(html_content) #TODO: I might need to change this in the future , cause it instanciates BasePreprocessor every time
     try:
         if not cleaned_text:
-            return {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': '[ERROR] empty content or fetch failed'}]}, 'query': query}
+            return {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': '[Chunk Worker ERROR] empty content or fetch failed'}]}, 'query': query}
         chunks = get_html_chunks(html=cleaned_text, max_tokens=max_tokens, is_clean_html=True, attr_cutoff_len=attr_cutoff_len)
         chunks_list = [{'chunkid': f"{doc_id}-{i+1}", 'chunkcontent': c} for i, c in enumerate(chunks)]
         return {'doc_id': doc_id, 'content': {'chunks': chunks_list}, 'query': query}
     except Exception as e:
-        return {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': f"[ERROR] {e}"}]}, 'query': query}
+        return {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': f"[Chunk Worker ERROR] {e}"}]}, 'query': query}
 
 
 class Preprocessor(BasePreprocessor):
@@ -210,7 +210,7 @@ class Preprocessor(BasePreprocessor):
                         tmp[idx] = fut.result()
                     except Exception as e:
                         doc_id = doc_id_start + idx
-                        tmp[idx] = {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': f"[ERROR] {e}"}]}, 'query': queries[idx]}
+                        tmp[idx] = {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': f"[Process ERROR] {e}"}]}, 'query': queries[idx]}
                 for i in range(n):
                     results[i] = tmp[i]
         # If we have only one CPU core or no CPU workers specified, use ThreadPoolExecutor for chunking
@@ -224,7 +224,7 @@ class Preprocessor(BasePreprocessor):
                         tmp[idx] = fut.result()
                     except Exception as e:
                         doc_id = doc_id_start + idx
-                        tmp[idx] = {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': f"[ERROR] {e}"}]}, 'query': queries[idx]}
+                        tmp[idx] = {'doc_id': doc_id, 'content': {'chunks': [{'chunkid': f"{doc_id}-err", 'chunkcontent': f"[Thread ERROR] {e}"}]}, 'query': queries[idx]}
                 for i in range(n):
                     results[i] = tmp[i]
 

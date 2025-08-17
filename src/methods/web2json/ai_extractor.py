@@ -1,514 +1,275 @@
-import os
-import time
-import numpy as np
-from google import genai
-from openai import OpenAI
-import time
-import random
-from openai import RateLimitError
+
 from functools import wraps
-from google.genai import types
-from pydantic import BaseModel
-from concurrent.futures import ThreadPoolExecutor
-from html_chunking import get_html_chunks
-from langchain_nvidia_ai_endpoints import NVIDIARerank
+import polars as pl
 from langchain_core.documents import Document
 from abc import ABC, abstractmethod
-from typing import List, Any, Dict, Tuple, Optional
-import re
-import json
-from langchain_text_splitters import HTMLHeaderTextSplitter
-from sentence_transformers import SentenceTransformer
-import requests
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from typing import List, Dict
-from tenacity import retry, wait_exponential, stop_after_attempt
-import trafilatura
+from typing import List, Dict ,Any
+from llm import LLMClient , NvidiaLLMClient
+import polars as pl
+import os
+import math
+import threading
+from typing import Any, Dict, List, Optional
+import polars as pl
 
 
-class LLMClient(ABC):
-    """
-    Abstract base class for calling LLM APIs.
-    """
-    def __init__(self, config: dict = None):
+class AIExtractor(ABC):
+    def __init__(self, llm_client: Any, prompt_template: str):
         """
-        Initializes the LLMClient with a configuration dictionary.
-        
-        Args:
-            config (dict): Configuration settings for the LLM client.
-        """
-        self.config = config or {}
-
-    @abstractmethod
-    def call_api(self, prompt: str) -> str:
-        """
-        Call the underlying LLM API with the given prompt.
-        
-        Args:
-            prompt (str): The prompt or input text for the LLM.
-
-        Returns:
-            str: The response from the LLM.
-        """
-        pass
-
-class RerankerClient(ABC):
-    """
-    Abstract base class for reranker APIs.
-    """
-    def __init__(self, config: dict = None):
-        """
-        Initializes the RerankerClient with a configuration dictionary.
+        Abstract base class for extractors that use an LLM to extract 
+        structured information from a dataset.
 
         Args:
-            config (dict): Configuration settings for the reranker client.
-        """
-        self.config = config or {}
-
-    @abstractmethod
-    def rerank(self, query: str, passages: List[str], top_k: int = 3) -> List[str]:
-        """
-        Rerank passages based on relevance to query.
-
-        Args:
-            query (str): Query string.
-            passages (List[str]): List of passages.
-            top_k (int): Number of top passages to return.
-
-        Returns:
-            List[str]: Top-k most relevant passages.
-        """
-        pass
-
-
-class GeminiLLMClient(LLMClient):
-    """
-    Concrete implementation of LLMClient for the Gemini API.
-    """
-
-    def __init__(self, config: dict):
-        """
-        Initializes the GeminiLLMClient with an API key, model name, and optional generation settings.
-
-        Args:
-            config (dict): Configuration containing:
-                - 'api_key': (optional) API key for Gemini (falls back to GEMINI_API_KEY env var)
-                - 'model_name': (optional) the model to use (default 'gemini-2.0-flash')
-                - 'generation_config': (optional) dict of GenerateContentConfig parameters
-        """
-        api_key = config.get("api_key") or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "API key for Gemini must be provided in config['api_key'] or GEMINI_API_KEY env var."
-            )
-        self.client = genai.Client(api_key=api_key)
-        self.model_name = config.get("model_name", "gemini-2.0-flash")
-        # allow custom generation settings, fallback to sensible defaults
-        gen_conf = config.get("generation_config", {})
-        self.generate_config = types.GenerateContentConfig(
-            response_mime_type=gen_conf.get("response_mime_type", "text/plain"),
-            temperature=gen_conf.get("temperature"),
-            max_output_tokens=gen_conf.get("max_output_tokens"),
-            top_p=gen_conf.get("top_p"),
-            top_k=gen_conf.get("top_k"),
-            # add any other fields you want to expose
-        )
-
-    def call_api(self, prompt: str) -> str:
-        """
-        Call the Gemini API with the given prompt (non-streaming).
-
-        Args:
-            prompt (str): The input text for the API.
-
-        Returns:
-            str: The generated text from the Gemini API.
-        """
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)],
-            )
-        ]
-
-        # Non-streaming call returns a full response object
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=contents,
-            config=self.generate_config,
-        )
-
-        # Combine all output parts into a single string
-        return response.text
-
-def extract_markdown_json(text: str) -> Optional[Dict[str, Any]]:
-        """
-        Find the first Markdown ```json ...``` block in `text`,
-        parse it as JSON, and return the resulting dict.
-        Returns None if no valid JSON block is found.
-        """
-        # 1) Look specifically for a ```json code fence
-        fence_match = re.search(
-            r"```json\s*(\{.*?\})\s*```",
-            text,
-            re.DOTALL | re.IGNORECASE
-        )
-        if not fence_match:
-            return None
-
-        json_str = fence_match.group(1)
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            return None
-
-def retry_on_ratelimit(max_retries=5, base_delay=1.0, max_delay=10.0):
-    def deco(fn):
-        @wraps(fn)
-        def wrapped(*args, **kwargs):
-            delay = base_delay
-            for attempt in range(max_retries):
-                try:
-                    return fn(*args, **kwargs)
-                except RateLimitError:
-                    if attempt == max_retries - 1:
-                        # give up
-                        raise
-                    # back off + jitter
-                    sleep = min(max_delay, delay) + random.uniform(0, delay)
-                    time.sleep(sleep)
-                    delay *= 2
-            # unreachable
-        return wrapped
-    return deco
-class NvidiaLLMClient(LLMClient):
-    """
-    Concrete implementation of LLMClient for the NVIDIA API (non-streaming).
-    """
-
-    def __init__(self, config: dict):
-        """
-        Initializes the NvidiaLLMClient with an API key, model name, and optional generation settings.
-
-        Args:
-            config (dict): Configuration containing:
-                - 'api_key': (optional) API key for NVIDIA (falls back to NVIDIA_API_KEY env var)
-                - 'model_name': (optional) the model to use (default 'google/gemma-3-1b-it')
-                - 'generation_config': (optional) dict of generation parameters like temperature, top_p, etc.
-        """
-        api_key = config.get("api_key") or os.environ.get("NVIDIA_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "API key for NVIDIA must be provided in config['api_key'] or NVIDIA_API_KEY env var."
-            )
-
-        self.client = OpenAI(
-            base_url="https://integrate.api.nvidia.com/v1",
-            api_key=api_key
-        )
-        self.model_name = config.get("model_name", "google/gemma-3-1b-it")
-
-        # Store generation settings with sensible defaults
-        gen_conf = config.get("generation_config", {})
-        self.temperature = gen_conf.get("temperature", 0)
-        self.top_p = gen_conf.get("top_p", 0.7)
-        self.max_tokens = gen_conf.get("max_tokens", 8192)
-
-    def set_model(self, model_name: str):
-        """
-        Set the model name for the NVIDIA API client.
-
-        Args:
-            model_name (str): The name of the model to use.
-        """
-        self.model_name = model_name
-
-    @retry_on_ratelimit(max_retries=20, base_delay=0.5, max_delay=5.0)
-    def call_api(self, prompt: str) -> str:
-        """
-        Call the NVIDIA API with the given prompt (non-streaming).
-
-        Args:
-            prompt (str): The input text for the API.
-
-        Returns:
-            str: The generated text from the NVIDIA API.
-        """
-        print("prompt: ", prompt)
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.temperature,
-            top_p=self.top_p,
-            max_tokens=self.max_tokens,
-            extra_body={"chat_template_kwargs": {"thinking":True}},
-            # stream is omitted (defaults to False)
-        )
-        # print("DONE")
-        # For the standard (non-streaming) response:
-        # choices[0].message.content holds the generated text
-        return response.choices[0].message.content
-    
-    def call_batch(self, prompts, max_workers=8):
-        """
-        Parallel batch with isolated errors: each prompt that still
-        fails after retries will raise, but others succeed.
-        """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        results = [None] * len(prompts)
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futures = {ex.submit(self.call_api, p): i for i, p in enumerate(prompts)}
-            for fut in as_completed(futures):
-                idx = futures[fut]
-                try:
-                    results[idx] = fut.result()
-                    print("DONE")
-                except RateLimitError:
-                    # You could set results[idx] = None or a default string
-                    results[idx] = f"<failed after retries>"
-        return results
-    
-
-class NvidiaRerankerClient(RerankerClient):
-    """
-    Concrete implementation of LLMClient for the NVIDIA API (non-streaming).
-    """
-
-    def __init__(self, config: dict):
-        self.model_name = config.get("model_name", "nvidia/llama-3.2-nv-rerankqa-1b-v2")
-        self.client = NVIDIARerank(
-            model=self.model_name,
-            api_key=os.getenv("NVIDIA_API_KEY"),
-        )
-
-    def set_model(self, model_name: str):
-        """
-        Set the model name for the NVIDIA API client.
-
-        Args:
-            model_name (str): The name of the model to use.
-        """
-        self.model_name = model_name
-
-    @retry_on_ratelimit(max_retries=6, base_delay=0.5, max_delay=5.0)
-    def rerank(self, query: str, passages: List[str], top_k: int = 3, threshold: float = 0.5) -> List[Document]:
-        # 1. Prepare and send documents for scoring
-        docs = [Document(page_content=p) for p in passages]
-        scored_docs = self.client.compress_documents(
-            query=str(query),
-            documents=docs
-        )
-
-        # 2. Extract raw scores and compute sigmoid probabilities
-        raw_scores = np.array([doc.metadata['relevance_score'] for doc in scored_docs], dtype=float)
-        print(f"raw scores {raw_scores}")
-        p_scores = 1 / (1 + np.exp(-raw_scores))
-        print(f"Sigmoid scores: {p_scores}")
-
-        # 3. Max normalization
-        max_score = np.max(p_scores)
-        if max_score == 0:
-            norm_scores = np.zeros_like(p_scores)
-        else:
-            norm_scores = p_scores / max_score
-        print(f"Normalized scores: {norm_scores}")
-
-        # 4. Filter by threshold using normalized scores
-        scored_pairs = [(doc, norm) for doc, norm in zip(scored_docs, norm_scores) if norm > threshold]
-        print(f"Filtered pairs:\n{scored_pairs}")
-
-        # 5. Return top_k documents (already sorted by model, no need to re-sort)
-        top_docs = [doc.page_content for doc, _ in scored_pairs]
-        return top_docs
-
-
-
-    
-    # TODO: will I need it ?
-    # def call_batch(self, prompts, max_workers=8):
-    #     pass
-
-def retry_on_error(fn):
-    """Simple retry decorator (exponential back-off, max 6 tries)."""
-    return retry(
-        wait=wait_exponential(multiplier=0.5, min=0.5, max=5),
-        stop=stop_after_attempt(6),
-        reraise=True,
-    )(fn)
-
-
-class ModalRerankerClient(RerankerClient):
-    """Client for the Modal Qwen3-Reranker endpoint (non-streaming)."""
-
-    def __init__(self, endpoint_url: str):
-        self.endpoint_url = endpoint_url.rstrip("/")  # ensure no trailing slash
-
-    def set_endpoint(self, url: str):
-        self.endpoint_url = url.rstrip("/")
-
-    @retry_on_error
-    def rerank(
-        self,
-        query: str,
-        passages: List[str],
-        threshold: float = 0.5,
-    ) -> List[Document]:
-        """Call the remote endpoint and return filtered passages."""
-        if not isinstance(query,str):
-            query = str(query)
-        payload = {"query": query, "passages": passages}
-        print(payload)
-        res = requests.post(self.endpoint_url + "/rerank", json=payload, timeout=60)
-        res.raise_for_status()
-        data = res.json()
-
-        # The endpoint already returns probabilities (0-1). Extract them.
-        ranked = data.get("ranked_passages", [])
-        # Extract scores
-        scores = np.array([p["score"] for p in ranked], dtype=float)
-        # Max normalization
-        max_score = scores.max() if len(scores) > 0 else 1.0
-        # max_score = 1
-        if max_score == 0:
-            norm_scores = np.zeros_like(scores)
-        else:
-            norm_scores = scores / max_score
-        # Filter by threshold using normalized scores
-        filtered = [
-            (p, norm) for p, norm in zip(ranked, norm_scores) if norm >= threshold
-        ]
-        # Convert to LangChain Documents
-        docs = [
-            Document(page_content=p["passage"], metadata={"score": p["score"], "norm_score": norm})
-            for p, norm in filtered
-        ]
-        
-        # docs.reverse()
-
-        return docs
-
-
-
-    
-    @retry_on_ratelimit(max_retries=6, base_delay=0.5, max_delay=5.0)
-    def call_api(self, prompt: str) -> str:
-        pass
-    
-    def call_batch(self, prompts, max_workers=8):
-        pass
-
-
-class AIExtractor:
-    def __init__(self, llm_client: LLMClient, prompt_template: str):
-        """
-        Initializes the AIExtractor with a specific LLM client and configuration.
-
-        Args:
-            llm_client (LLMClient): An instance of a class that implements the LLMClient interface.
-            prompt_template (str): The template to use for generating prompts for the LLM.
-            should contain placeholders for dynamic content. 
-            e.g., "Extract the following information: {content} based on schema: {schema}"
+            llm_client (Any): An instance of a class that implements the LLMClient interface.
+            prompt_template (str): Template for generating prompts for the LLM.
+                                   Should contain placeholders for dynamic content.
+                                   Example: 
+                                   "Extract the following information: {content} based on schema: {schema}"
         """
         self.llm_client = llm_client
         self.prompt_template = prompt_template
 
-    def extract(self, content: str, schema: BaseModel) -> str:
+    @abstractmethod
+    def extract(self, df: pl.DataFrame) -> pl.DataFrame:
         """
-        Extracts structured information from the given content based on the provided schema.
+        Abstract method to extract structured information from the given Polars DataFrame.
 
         Args:
-            content (str): The raw content to extract information from.
-            schema (BaseModel): A Pydantic model defining the structure of the expected output.
+            df (pl.DataFrame): The input Polars DataFrame containing raw content.
 
         Returns:
-            str: The structured JSON object as a string.
+            pl.DataFrame: A Polars DataFrame containing structured information.
         """
-        prompt = self.prompt_template.format(content=content, schema=schema.model_json_schema())
-        # print(f"Generated prompt: {prompt}")
-        response = self.llm_client.call_api(prompt)
-        return response
+        pass
     
-class LLMClassifierExtractor(AIExtractor):
+class RerankerExtractor(AIExtractor, ABC):
     """
-    Extractor that uses an LLM to classify and extract structured information from text content.
-    This class is designed to handle classification tasks where the LLM generates structured output based on a provided schema.
+    Reranker that loads a vLLM-based reranker model in-process and uses it
+    to score passages for each query. Returns a Polars DataFrame with columns:
+      ["query", "passage", "score", "rank"]
+    NOTE: Prompt template should has placeholders for "query" and "content".
     """
-    def __init__(self, reranker: RerankerClient, llm_client: LLMClient, prompt_template: str, classifier_prompt: str, ):
-        """
-        Initializes the LLMClassifierExtractor with an LLM client and a prompt template.
 
-        Args:
-            llm_client (LLMClient): An instance of a class that implements the LLMClient interface.
-            prompt_template (str): The template to use for generating prompts for the LLM.
-        """
+    def __init__(self, llm_client: Any, prompt_template: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(llm_client, prompt_template)
-        self.reranker = reranker
-        self.classifier_prompt = classifier_prompt
+        self.config = config.copy() if config else {}
+        # default model (override via config["model_name"])
+        self.model_name: str = self.config.get("model_name", "abdo-Mansour/Qwen3-Reranker-0.6B-HTML")
+        # max token cap (same as server)
+        self.max_length = self.config.get("max_length", 8192)
+        # top_k returned per query (None => return all)
+        self.default_top_k = self.config.get("top_k", None)
+        # GPU / vllm options
+        self.vllm_kwargs = self.config.get("vllm_kwargs", {
+            "tensor_parallel_size": 1,
+            # "quantization": "bitsandbytes",  # optional
+            "gpu_memory_utilization": 0.7,
+            "max_model_len": 2464,
+            "enable_prefix_caching": True,
+        })
+        # placeholders to be set by _load_reranker
+        self.tok = None
+        self.llm = None
+        self.suffix_ids = None
+        self.yes_id = None
+        self.no_id = None
+        self.sampling = None
+        self.llm_lock = threading.Lock()
 
-    def chunk_content(self, content: str , max_tokens: int = 500, is_clean: bool = True) -> List[str]:
+        # load the reranker model/tokenizer into memory
+        self._load_reranker()
+
+    def _load_reranker(self):
         """
-        Splits the content into manageable chunks for processing.
-
-        Args:
-            content (str): The raw content to be chunked.
-
-        Returns:
-            List[str]: A list of text chunks.
+        Load tokenizer, vLLM LLM and sampling params into this instance.
         """
-        # Use the get_html_chunks function to split the content into chunks
-        return get_html_chunks(html=content, max_tokens=max_tokens, is_clean_html=is_clean, attr_cutoff_len=5)
-    
+        # ensure environment flags similar to your script
+        os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+        os.environ.setdefault("VLLM_USE_V1", "1")
 
-    def classify_chunks(self, passages, top_k=3, hf: bool = False):  # reranker
-        # print("TIME TO CLASSIFY")
-        query = self.classifier_prompt
+        # local imports (fail early if not installed)
+        from transformers import AutoTokenizer
+        from vllm import LLM, SamplingParams
 
-        if hf:
-            # print("Using Hugging Face reranker for classification.")
-            return self.reranker.rerank(query, passages, top_k=top_k)
-        response = self.reranker.rerank(query,passages)
-        print(f"response: {response}")
-        # print("DONNNNE")
-        # NVIDIA reranker path
-        return response
+        MODEL_NAME = self.model_name
 
-    def extract(self, content, schema, hf: bool = False):
+        # Tokenizer
+        tok = AutoTokenizer.from_pretrained(MODEL_NAME)
+        tok.padding_side = "left"
+        tok.pad_token = tok.eos_token
+
+        # LLM
+        # pass through any kwargs set in self.vllm_kwargs
+        llm = LLM(model=MODEL_NAME, **self.vllm_kwargs)
+
+        # Suffix and yes/no token ids (keeps same behavior as your file)
+        suffix = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        suffix_ids = tok.encode(suffix, add_special_tokens=False)
+
+        yes_id = tok("yes", add_special_tokens=False).input_ids[0]
+        no_id = tok("no", add_special_tokens=False).input_ids[0]
+
+        sampling = SamplingParams(
+            temperature=0,
+            max_tokens=1,
+            logprobs=20,
+            allowed_token_ids=[yes_id, no_id],
+        )
+
+        # assign to instance
+        self.tok = tok
+        self.llm = llm
+        self.suffix_ids = suffix_ids
+        self.yes_id = yes_id
+        self.no_id = no_id
+        self.sampling = sampling
+        self.llm_lock = threading.Lock()
+
+    def _format_templates(self, query: str, passages: List[str]) -> List[List[Dict[str, str]]]:
         """
-        Extracts structured information from the given content based on the provided schema.
-
-        Args:
-            content (str): The raw content to extract information from.
-            schema (BaseModel): A Pydantic model defining the structure of the expected output.
-            hf (bool): Whether to use the Hugging Face reranker or NVIDIA (default).
+        Build the chat-style templates for each passage (list-of-templates).
+        Returns list of templates matching the vLLM chat API shape used in your server.
         """
-        # print("TIME TO EXTRACT")
-        chunks = self.chunk_content(content, max_tokens=500)
-        print(f"Content successfully chunked into {len(chunks)}.")
-        # print(f"Content successfully chunked: {chunks}")
-        # chunks = [trafilatura.extract(chunk,favor_recall=True) for chunk in chunks]
-        # chunks = [chunk for chunk in chunks if chunk is not None]
-        classified_chunks = self.classify_chunks(chunks, hf=hf)  # conditional reranker
-        # extracting the content
+        INST = (
+            "You are a precision HTML content reranker. Your task is to evaluate HTML chunks "
+            "for their potential to populate a given schema with meaningful data.\n\n"
+            "## Core Objective:\n"
+            "Score HTML content based on its likelihood to contain extractable information "
+            "that matches the target schema requirements.\n\n"
+            "## Instructions:\n"
+            "1. Content Analysis: Examine the HTML chunk's text content, attributes, and semantic structure\n"
+            "2. Schema Mapping: Assess how well the content aligns with schema field requirements\n"
+            "3. Information Density: Evaluate the quantity and quality of extractable data\n"
+            "4. Relevance Scoring: Assign a binary relevance score based on extraction potential\n"
+        )
 
-        if isinstance(classified_chunks[0],Document):
-            classified_chunks = [chunk.page_content for chunk in classified_chunks]
-        print(f"Classified Chunks {len(classified_chunks)}")
-        # print(classified_chunks)
-        # print('='*80)
-        # NOTE: More preprocesing
-        # classified_chunks = [trafilatura.extract(chunk,favor_recall=True) for chunk in classified_chunks]
-        # classified_chunks = [chunk for chunk in classified_chunks if chunk is not None]
-        filtered_content = "\n\n".join(classified_chunks)
+        def _format(q: str, d: str):
+            return [
+                {"role": "system", "content": 'Judge whether the Document meets the requirements based on the Query and the Instruct provided. Answer only "yes" or "no".'},
+                {"role": "user",   "content": f"<Instruct>: {INST}\n\n<Query>: {q}\n\n<Document>: {d}"},
+            ]
 
-        if not filtered_content:
-            print("Warning: No relevant chunks found. Returning empty response.")
-            return "{}"
+        templates = [_format(query, p) for p in passages]
+        return templates
 
-        prompt = self.prompt_template.format(content=filtered_content, schema=schema.model_json_schema())
-        # print(f"Generated prompt for extraction: {prompt[:500]}...")
-        llm_response = self.llm_client.call_api(prompt)
-        # print(f"LLM response: {llm_response[:500]}...")
+    def _classify(self, processed_batch: List) -> List[float]:
+        if not processed_batch:
+            return []
+
+        # ensure model loaded
+        if self.llm is None or self.tok is None:
+            raise RuntimeError("Reranker model/tokenizer not loaded")
+
+        # Tokenize using tokenizer's chat helper
+        # apply_chat_template returns token ids lists when tokenize=True
+        tokenized = self.tok.apply_chat_template(processed_batch, tokenize=True, add_generation_prompt=False, enable_thinking=False)
+        # cap + append suffix ids
+        tokenized = [ids[: self.max_length] + self.suffix_ids for ids in tokenized]
+
+        # Prepare TokensPrompt objects
+        from vllm.inputs.data import TokensPrompt
+        msgs = [TokensPrompt(prompt_token_ids=ids) for ids in tokenized]
+
+        # Call llm.generate (serialize with lock to be safe)
+        def _call_generate():
+            with self.llm_lock:
+                return self.llm.generate(msgs, self.sampling, use_tqdm=False)
+
+        outs = _call_generate()
+
+        # Compute probabilities (softmax over yes/no logits) per passage
+        scores: List[float] = []
+        for o in outs:
+            # defensive access to last token logprobs
+            lp = o.outputs[0].logprobs[-1]
+            true_logits = lp.get(self.yes_id, type("L", (), {"logprob": -10})).logprob
+            false_logits = lp.get(self.no_id,  type("L", (), {"logprob": -10})).logprob
+
+            # convert to probabilities (numerical stable enough for just two tokens)
+            y = math.exp(true_logits)
+            n = math.exp(false_logits)
+            prob_yes = y / (y + n) if (y + n) != 0 else 0.0
+            scores.append(prob_yes)
         
-        return llm_response or "{}"
+        return scores
+
+    def _filter(self, batch: pl.DataFrame , threshold = 0.5) -> pl.DataFrame:
+        """
+        Filter the batch based on a threshold.
+        Returns a DataFrame with only the rows that have a score above the threshold.
+        """
+        if 'score_norm' not in batch.columns:
+            raise ValueError("Batch must contain 'score' column for filtering.")
+
+        filtered_batch = batch.filter(pl.col('score') >= threshold)
+        return filtered_batch
+
+
+    def _generate_output(self, batch: pl.DataFrame) -> pl.DataFrame:
+        # Group by doc_id and concatenate chunks, while preserving the query column
+        df_grouped = batch.group_by("doc_id").agg([
+            pl.concat_str("chunkcontent", separator="\n").alias("full_content"),
+            pl.col("query").first().alias("query")  # Preserve the query column
+        ])
+    
+        # Create the prompt using the prompt template
+        df_prompt = df_grouped.with_columns(
+            pl.struct(["query", "full_content"]).map_elements(
+                lambda s: self.prompt_template.format(query=s["query"], content=s["full_content"]),
+                return_dtype=pl.String  # Specify return type for clarity
+            ).alias("prompt")
+        )
+        
+        prompts = df_prompt["prompt"].to_list()
+        print("Generating prompts for LLM...")
+        # Call the LLM client to get the responses
+        responses = self.llm_client.call_batch(prompts)
+        
+        df_response = df_prompt.with_columns(
+            pl.Series("response", responses, dtype=pl.Utf8)
+        )
+    
+        return df_response
+    
+    def extract(self, df: pl.DataFrame) -> pl.DataFrame:
+        
+        # Format the input Dataframe
+        processed = []
+        for row in df.iter_rows(named=True):
+            for chunk in row['content']['chunks']:
+                processed += self._format_templates(row['query'], [chunk['chunkcontent']])
+        
+        # Score the passages
+        scores = self._classify(processed)
+
+        # Create a new DataFrame with the results
+        expanded_df = df.with_columns(
+            pl.col("content").struct.field("chunks").alias("chunks")
+        )
+
+        # Step 2: explode the list into multiple rows
+        expanded_df = expanded_df.explode("chunks")
+
+        # Step 3: unnest the struct inside the list
+        expanded_df = expanded_df.unnest("chunks")
+
+        scores_df = expanded_df.with_columns(
+            pl.Series('score', scores, dtype=pl.Float64)
+        )
+
+
+        # Max normalization of scores for each docid TODO: need to add it do the config
+        norm_df = scores_df.with_columns(
+            (pl.col("score") / pl.col("score").max().over("doc_id")).alias("score_norm")
+        )
+
+        # Filter the DataFrame based on the score threshold
+        filtered_df = self._filter(norm_df, threshold=0.5)
+
+        return self._generate_output(filtered_df)
+
+        
+
+ 
+        
 
