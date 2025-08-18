@@ -1,5 +1,8 @@
 from typing import Optional, Dict, Any
-
+import polars as pl
+# from tqdm import tqdm
+from tqdm.notebook import tqdm
+from math import ceil
 class Experiment:
     def __init__(
         self, 
@@ -27,27 +30,28 @@ class Experiment:
         else:
             iterator = iter(self.data)
 
-        for batch in iterator:
-            # batch can be a list of tuples or single tuple depending on 
-            if batch_size is not None:
-                # batch mode
-                batch_preds = [self.pipeline.extract(html, query) for html, query, _ in batch]
-                batch_gts = [gt for _, _, gt in batch]
-                predictions.extend(batch_preds)
-                ground_truths.extend(batch_gts)
+        # tqdm wrapper — leave total=None if you don’t know dataset length
+        for batch in tqdm(iterator, desc="Running Experiment", unit="batch", total=ceil(getattr(self.data, "__len__", lambda: None)()/ batch_size if batch_size else 1)):
+            if isinstance(batch, list):
+                html, query, gt = zip(*batch)
             else:
-                # single sample mode
                 html, query, gt = batch
-                pred = self.pipeline.extract(html, query)
-                print(f"Processed: {pred}")
-                print(f"Ground Truth: {gt}")
-                predictions.append(pred)
-                ground_truths.append(gt)
 
-        print("Predictions")
-        print(predictions)
-        print("GT")
-        print(ground_truths)
-        # Compute metrics using the evaluator
+            # Turn html and query into a polars DataFrame
+            batch_df = pl.DataFrame({
+                'html': html,
+                'query': query
+            })
+            # print(f"Batch Shape {batch_df.shape}")
+            pred = self.pipeline.extract(batch_df)
+            # print(pred)
+            predictions.append(pred)
+            ground_truths.append(gt)
+
+        # print("Predictions")
+        # print(predictions)
+        # print("GT")
+        # print(ground_truths)
+        
         # results = self.evaluator.compute_metrics(predictions, ground_truths)
-        # return results
+        return predictions , ground_truths

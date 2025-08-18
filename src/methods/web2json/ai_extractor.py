@@ -4,7 +4,7 @@ import polars as pl
 from langchain_core.documents import Document
 from abc import ABC, abstractmethod
 from typing import List, Dict ,Any
-from llm import LLMClient , NvidiaLLMClient
+from src.methods.web2json.llm import LLMClient , NvidiaLLMClient
 import polars as pl
 import os
 import math
@@ -62,7 +62,7 @@ class RerankerExtractor(AIExtractor, ABC):
         # GPU / vllm options
         self.vllm_kwargs = self.config.get("vllm_kwargs", {
             "tensor_parallel_size": 1,
-            # "quantization": "bitsandbytes",  # optional
+            "quantization": "bitsandbytes",  # optional
             "gpu_memory_utilization": 0.7,
             "max_model_len": 2464,
             "enable_prefix_caching": True,
@@ -221,7 +221,7 @@ class RerankerExtractor(AIExtractor, ABC):
         )
         
         prompts = df_prompt["prompt"].to_list()
-        print("Generating prompts for LLM...")
+        # print("Generating prompts for LLM...")
         # Call the LLM client to get the responses
         responses = self.llm_client.call_batch(prompts)
         

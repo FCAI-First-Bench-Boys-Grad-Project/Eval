@@ -28,6 +28,9 @@ class WebSrcDataset(BaseHTMLDataset):
         self.data_df = pd.read_json(data_source_path, lines=True)
         # Initialize other necessary attributes, e.g., loading data from source
         self.abb_to_domain = {row['domain'][:2]: row['domain'] for _, row in self.html_content_df.iterrows()}
+        
+        # it needs to match the names used in the evaluation script
+        self.evaluation_metrics = ['exact_match', 'f1_token_level']  # Example metrics, adjust as needed
     
     def __len__(self) -> int:
         """Return number of samples"""

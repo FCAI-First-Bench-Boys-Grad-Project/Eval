@@ -1,66 +1,48 @@
 from src.methods.base import BasePipeline
-from typing import Dict, Any
 from src.methods.web2json.ai_extractor import *
 from src.methods.web2json.preprocessor import *
 from src.methods.web2json.postprocessor import *
-from src.methods.web2json.pipeline import *
-import os
-
+from src.methods.web2json.llm import *
 from pydantic import BaseModel
 class RerankerPipeline(BasePipeline):
+    
     def __init__(self):
-        self.prompt_template = """Extract the following information from the provided content.
-                
-        Content to analyze:
-        {content}
+        super().__init__()
 
-        Instructions:
-        - Extract only information that is explicitly present in the content
-        - Preserve the original formatting and context where relevant
-        - Return the extracted data in a structured format
-        """
+        self.preprocessor = Preprocessor(chunk_size=500)
+        self.extractor = RerankerExtractor(
+            llm_client=NvidiaLLMClient(config={
+            "model_name": "google/gemma-3n-e2b-it",
+            }),
+            prompt_template="""You are an assistant that must ONLY respond with a single VALID JSON object (no markdown, no explanation, no extra text).
+            Validate that the JSON is well-formed. If a requested field cannot be extracted, set it to null (or an empty list/object if the schema specifies).
 
-        try:
-            self.preprocessor = BasicPreprocessor(config={'keep_tags': True}) 
-            self.llm = NvidiaLLMClient(config={'api_key': os.getenv('NVIDIA_API_KEY'),'model_name': 'google/gemma-3n-e2b-it'})
-            self.reranker = ModalRerankerClient("http://localhost:8000")
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize LLM client: {str(e)}")
-        
-        self.ai_extractor = None
+            Now extract information according below.
+
+            Query:
+            {query}
+
+            Content:
+            {content}
+
+            Return the JSON object now. DO NOT output anything else."""
+        )
         self.postprocessor = PostProcessor()
-        self.pipeline = None
 
-    def extract(self, html: str, query: str) -> Dict[str, Any]:
+    def extract(self, batch: pl.DataFrame) -> List[dict]:
         """
-        Extract information from content (converted to HTML), optionally using query.
+        Extract information from a batch of content.
         """
+        # Preprocess the batch
+        preprocessed_batch = self.preprocessor.process_batch(batch,content_col='html',return_polars=True)
 
-        if self.ai_extractor is None or self.pipeline is None:
-            self.ai_extractor = LLMClassifierExtractor(
-                reranker=self.reranker,
-                llm_client=self.llm,
-                prompt_template=self.prompt_template + f"Answer the question {query} based on the provided content.",
-                classifier_prompt=f"Answer the question {query} based on the provided content.",
-            )
-            self.pipeline = Pipeline(self.preprocessor, self.ai_extractor, self.postprocessor)
+        # Extract using AIExtractor
+        extracted_data = self.extractor.extract(preprocessed_batch)
+        # print(f"Extracted Data: {extracted_data}")
+        # Post-process the extracted data
+        postprocessed_data = self.postprocessor.process_dataframe(extracted_data)
 
-        try:
-            # make a BaseModel class that just has answer as a field
-            class AnswerModel(BaseModel):
-                answer: str
-            result = self.pipeline.run(content = html,is_url=False, schema=AnswerModel)
-            print("-"*80)
-            print(f"Processed result: {result}")
-            return result
-        except Exception as e:
-            return {"error": f"Processing error: {str(e)}"}
+        return postprocessed_data
+        
 
-    def _convert_to_html(self, content: str) -> str:
-        """
-        Converts input content to HTML string.
-        """
-        if content.strip().startswith("<html"):
-            return content
-        else:
-            return f"<html><body>{content}</body></html>"
+    
