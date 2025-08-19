@@ -1,18 +1,23 @@
 from typing import Optional, Dict, Any
 import polars as pl
 # from tqdm import tqdm
+from methods.base import BasePipeline
+from eval.evaluator import Evaluator
 from tqdm.notebook import tqdm
 from math import ceil
+
 class Experiment:
     def __init__(
         self, 
-        data,            # dataset instance
-        pipeline,        # model or processing pipeline instance
-        evaluator,       # evaluator instance
+        data,            # dataset instance TODO: add type
+        pipeline:BasePipeline,        # model or processing pipeline instance
+        evaluator:Evaluator,       # evaluator instance
     ):
         self.data = data
-        self.pipeline = pipeline
-        self.evaluator = evaluator
+        self.pipeline:BasePipeline = pipeline
+        self.evaluator:Evaluator  = evaluator
+        
+        # TODO MLflow
 
     def run(self, batch_size: Optional[int] = None, shuffle: bool = False) -> Dict[str, Any]:
         """
@@ -42,16 +47,19 @@ class Experiment:
                 'html': html,
                 'query': query
             })
+
+            # FIXME: Robustness against failure and failed indexes
             # print(f"Batch Shape {batch_df.shape}")
             pred = self.pipeline.extract(batch_df)
             # print(pred)
-            predictions.append(pred)
-            ground_truths.append(gt)
+            predictions.extend(pred)
+            ground_truths.extend(gt)
 
         # print("Predictions")
         # print(predictions)
         # print("GT")
         # print(ground_truths)
         
+        # TODO MLFlow
         results  = self.evaluator.evaluate(pl.Series(predictions), pl.Series(ground_truths))
         return predictions , ground_truths , results

@@ -1,0 +1,7 @@
+- [ ] Write Paper
+- [ ] Run Experiments
+- [ ] Schedule Experiments
+- [ ] Preprocessor
+- [ ] Quantization for models when possible
+- [ ] Gemma 3 270M
+- [ ] Fine Tune Generation

@@ -109,7 +109,7 @@ def compute_f1_squad(a_gold: str, a_pred: str) -> Tuple[float, float, float]:
     
 
 # --------------------------
-# Matcher (exact / fuzzy)
+# Matcher (exact / fuzzy) # TODO: Add Embedder Evaluation
 # --------------------------
 class Matcher:
     def __init__(self, cfg: Optional[MatcherConfig] = None):
@@ -180,6 +180,8 @@ class Matcher:
 # --------------------------
 # Metrics base class
 # --------------------------
+# TODO: Save results in Metric class
+# TODO: Create Methods for metric retrieval 
 class Metric(ABC):
     @abstractmethod
     def name(self) -> str:
@@ -266,7 +268,7 @@ class Evaluator:
         self.parallel = parallel
         self.n_procs = max(1, n_procs)
         # instantiate metric objects
-        self.metrics = []
+        self.metrics = [] # TODO Return this instead
         for name in evaluation_metrics:
             if name not in self.METRIC_CLASSES:
                 raise KeyError(f"Unknown metric {name}")
@@ -300,5 +302,4 @@ class Evaluator:
             res = metric.calculate(pred, gt, parallel=self.parallel, n_procs=self.n_procs)
             results[metric.name()] = res
         return results
-
 
