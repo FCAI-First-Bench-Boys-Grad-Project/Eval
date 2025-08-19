@@ -11,7 +11,7 @@ import math
 import threading
 from typing import Any, Dict, List, Optional
 import polars as pl
-
+import torch
 
 class AIExtractor(ABC):
     def __init__(self, llm_client: Any, prompt_template: str):
@@ -61,7 +61,7 @@ class RerankerExtractor(AIExtractor, ABC):
         self.default_top_k = self.config.get("top_k", None)
         # GPU / vllm options
         self.vllm_kwargs = self.config.get("vllm_kwargs", {
-            "tensor_parallel_size": 1,
+            "tensor_parallel_size": torch.cuda.device_count(),
             "quantization": "bitsandbytes",  # optional
             "gpu_memory_utilization": 0.7,
             "max_model_len": 2464,
