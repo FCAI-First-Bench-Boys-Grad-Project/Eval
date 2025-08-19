@@ -183,6 +183,13 @@ class Matcher:
 # TODO: Save results in Metric class
 # TODO: Create Methods for metric retrieval 
 class Metric(ABC):
+    def __init__(self):
+        super().__init__()
+
+        # FIXME: Metric values.
+        self.value = 2.3
+        self.additional_info = {}
+
     @abstractmethod
     def name(self) -> str:
         ...
@@ -195,6 +202,10 @@ class Metric(ABC):
                   n_procs: int = 1) -> Dict[str, Any]:
        
         ...
+
+# FOR Example, FIXME
+class F1Fuzzy(Metric):
+    pass
 
 class TokenF1(Metric):
     def name(self) -> str:
