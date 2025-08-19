@@ -30,7 +30,7 @@ class WebSrcDataset(BaseHTMLDataset):
         self.abb_to_domain = {row['domain'][:2]: row['domain'] for _, row in self.html_content_df.iterrows()}
         
         # it needs to match the names used in the evaluation script
-        self.evaluation_metrics = ['exact_match', 'f1_token_level']  # Example metrics, adjust as needed
+        self.evaluation_metrics = ['token_f1']  # Example metrics, adjust as needed
     
     def __len__(self) -> int:
         """Return number of samples"""
@@ -53,12 +53,12 @@ class WebSrcDataset(BaseHTMLDataset):
         
         html = html_row['html'].iloc[0] if not html_row.empty else None
         query = row['question']
-        ground_truth = {
-            'answer': row['answer'],
-            'element_id': row['element_id'],
-            'answer_start': row['answer_start']
-        }
-        
+        # ground_truth = {
+        #     'answer': row['answer'],
+        #     'element_id': row['element_id'],
+        #     'answer_start': row['answer_start']
+        # }
+        ground_truth = row['answer']  # Adjust based on your evaluation needs
         return html, query, ground_truth
 
     

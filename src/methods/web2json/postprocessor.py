@@ -34,6 +34,11 @@ def _extract_and_repair_json(response: str) -> dict:
 
         repaired = repair_json(json_string)
         parsed = json.loads(repaired)
+
+        # Checking if the parsed JSON just contains a single key "answer"
+        if isinstance(parsed, dict) and len(parsed) == 1 and "answer" in parsed:
+            # If it does, we can return it directly
+            return parsed['answer']
         return parsed
     except Exception:
         return {}

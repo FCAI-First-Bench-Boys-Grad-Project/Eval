@@ -53,5 +53,5 @@ class Experiment:
         # print("GT")
         # print(ground_truths)
         
-        # results = self.evaluator.compute_metrics(predictions, ground_truths)
-        return predictions , ground_truths
+        results  = self.evaluator.evaluate(pl.Series(predictions), pl.Series(ground_truths))
+        return predictions , ground_truths , results
