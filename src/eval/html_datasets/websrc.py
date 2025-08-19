@@ -1,4 +1,4 @@
-from src.html_datasets.base import BaseHTMLDataset
+from eval.html_datasets.base import BaseHTMLDataset
 from typing import Iterator, List, Optional, Tuple, Any
 import pandas as pd
 import random

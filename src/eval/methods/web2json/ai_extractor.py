@@ -4,7 +4,7 @@ import polars as pl
 from langchain_core.documents import Document
 from abc import ABC, abstractmethod
 from typing import List, Dict ,Any
-from src.methods.web2json.llm import LLMClient , NvidiaLLMClient
+from eval.methods.web2json.llm import LLMClient , NvidiaLLMClient
 import polars as pl
 import os
 import math
