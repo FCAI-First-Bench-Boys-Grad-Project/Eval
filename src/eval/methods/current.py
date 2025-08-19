@@ -1,8 +1,8 @@
-from src.methods.base import BasePipeline
-from src.methods.web2json.ai_extractor import *
-from src.methods.web2json.preprocessor import *
-from src.methods.web2json.postprocessor import *
-from src.methods.web2json.llm import *
+from eval.methods.base import BasePipeline
+from eval.methods.web2json.ai_extractor import *
+from eval.methods.web2json.preprocessor import *
+from eval.methods.web2json.postprocessor import *
+from eval.methods.web2json.llm import *
 from pydantic import BaseModel
 class RerankerPipeline(BasePipeline):
     
