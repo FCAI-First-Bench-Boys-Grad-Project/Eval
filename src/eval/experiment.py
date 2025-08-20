@@ -6,6 +6,9 @@ from eval.evaluator import Evaluator
 from eval.html_datasets.base import BaseHTMLDataset
 from tqdm.notebook import tqdm
 from math import ceil
+from celery import Celery
+
+app = Celery("experiments", broker="redis://localhost:6379")
 
 class Experiment:
     def __init__(
@@ -19,7 +22,8 @@ class Experiment:
         self.evaluator:Evaluator  = evaluator
         
         # TODO MLflow
-
+    
+    @app.task
     def run(self, batch_size: Optional[int] = None, shuffle: bool = False) -> Dict[str, Any]:
         """
         Run the experiment end-to-end:
