@@ -180,15 +180,27 @@ class Matcher:
 # --------------------------
 # Metrics base class
 # --------------------------
-# TODO: Save results in Metric class
-# TODO: Create Methods for metric retrieval 
 class Metric(ABC):
     def __init__(self):
         super().__init__()
 
-        # FIXME: Metric values.
-        self.value = 2.3
-        self.additional_info = {}
+        
+        self._values: Dict[str, Any] = {}
+        self._scores: Dict[str, List[float]] = {}
+
+    @property
+    def values(self) -> Dict[str, Any]:
+        """
+        Returns the aggregated values of the metric.
+        """
+        return self._values
+    
+    @property
+    def scores(self) -> Dict[str, List[float]]:
+        """
+        Returns the individual scores for each instance.
+        """
+        return self._scores
 
     @abstractmethod
     def name(self) -> str:
@@ -203,9 +215,6 @@ class Metric(ABC):
        
         ...
 
-# FOR Example, FIXME
-class F1Fuzzy(Metric):
-    pass
 
 class TokenF1(Metric):
     def name(self) -> str:
@@ -238,18 +247,24 @@ class TokenF1(Metric):
         precision_scores = [res["precision"] for res in results]
         recall_scores = [res["recall"] for res in results]  
 
+        # Save into self._values and self._scores
+        self._values["f1"] = sum(f1_scores) / len(f1_scores) if f1_scores else 0.0
+        self._values["precision"] = sum(precision_scores) / len(precision_scores) if precision_scores else 0.0
+        self._values["recall"] = sum(recall_scores) / len(recall_scores) if recall_scores else 0.0
+
+        self._scores["f1"] = f1_scores
+        self._scores["precision"] = precision_scores
+        self._scores["recall"] = recall_scores
+
         return {
-            "f1":{
-                'average': sum(f1_scores) / len(f1_scores) if f1_scores else 0.0,
-                'scores': f1_scores
+            "f1": {
+            'average': self._values["f1"],
             },
             "precision": {
-                'average': sum(precision_scores) / len(precision_scores) if precision_scores else 0.0,
-                'scores': precision_scores
+            'average': self._values["precision"],
             },
             "recall": {
-                'average': sum(recall_scores) / len(recall_scores) if recall_scores else 0.0,
-                'scores': recall_scores
+            'average': self._values["recall"],
             }
         }
 
@@ -264,6 +279,7 @@ class TokenF1(Metric):
 class Evaluator:
     METRIC_CLASSES = {
         "token_f1": TokenF1,
+        "em": ExatMatch,  # TODO: Implement ExactMatch
     }
 
     def __init__(self, evaluation_metrics: List[str],
@@ -279,13 +295,18 @@ class Evaluator:
         self.parallel = parallel
         self.n_procs = max(1, n_procs)
         # instantiate metric objects
-        self.metrics = [] # TODO Return this instead
+        self.metrics = [] 
         for name in evaluation_metrics:
             if name not in self.METRIC_CLASSES:
                 raise KeyError(f"Unknown metric {name}")
             if name == "token_f1":
                 self.metrics.append(self.METRIC_CLASSES[name]())
-            
+    
+    def get_metrics(self) -> List[Metric]:
+        """
+        Returns the list of instantiated metrics.
+        """
+        return self.metrics
 
     def evaluate(self, pred: Any, gt: Any) -> Dict[str, Any]:
         if not is_not_null(pred) or not is_not_null(gt):
@@ -312,5 +333,6 @@ class Evaluator:
         for metric in self.metrics:
             res = metric.calculate(pred, gt, parallel=self.parallel, n_procs=self.n_procs)
             results[metric.name()] = res
+        
         return results
 

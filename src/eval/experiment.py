@@ -3,17 +3,18 @@ import polars as pl
 # from tqdm import tqdm
 from eval.methods.base import BasePipeline
 from eval.evaluator import Evaluator
+from eval.html_datasets.base import BaseHTMLDataset
 from tqdm.notebook import tqdm
 from math import ceil
 
 class Experiment:
     def __init__(
         self, 
-        data,            # dataset instance TODO: add type
+        data:BaseHTMLDataset,            # dataset instance TODO: add type
         pipeline:BasePipeline,        # model or processing pipeline instance
         evaluator:Evaluator,       # evaluator instance
     ):
-        self.data = data
+        self.data:BaseHTMLDataset = data
         self.pipeline:BasePipeline = pipeline
         self.evaluator:Evaluator  = evaluator
         
