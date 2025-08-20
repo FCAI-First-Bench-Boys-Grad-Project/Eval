@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 import polars as pl
 # from tqdm import tqdm
-from methods.base import BasePipeline
+from eval.methods.base import BasePipeline
 from eval.evaluator import Evaluator
 from tqdm.notebook import tqdm
 from math import ceil
