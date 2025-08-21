@@ -2,6 +2,7 @@
 - [ ] Write Paper
 - [ ] Run Experiments
 - [ ] Schedule Experiments
+- [ ] ML Flow or DVC Experiment Tracking
 
 ### **Core Development & Cleanup**
 - [ ] Iterate through the entire system for a full review
@@ -29,6 +30,9 @@
 - [ ] Develop and implement additional evaluation metrics
 - [ ] Create a page-level evaluation using MarkupLM on the SWDE dataset
 - [ ] Evaluate our custom model/system ("ours")
+- [ ] Embedder evaluation
 
 ### **System Performance**
 - [ ] **(Pending)** Improve overall system speed
+- [ ] Logger to log everything, including Speed of each operation, or just use Pheonix
+
