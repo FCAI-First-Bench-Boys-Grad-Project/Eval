@@ -279,7 +279,7 @@ class TokenF1(Metric):
 class Evaluator:
     METRIC_CLASSES = {
         "token_f1": TokenF1,
-        "em": ExatMatch,  # TODO: Implement ExactMatch
+        # "em": ExatMatch,  # TODO: Implement ExactMatch
     }
 
     def __init__(self, evaluation_metrics: List[str],

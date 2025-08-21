@@ -7,17 +7,22 @@ from eval.html_datasets.base import BaseHTMLDataset
 from tqdm.notebook import tqdm
 from math import ceil
 
+
 class Experiment:
     def __init__(
         self, 
-        data:BaseHTMLDataset,            # dataset instance TODO: add type
+        data:BaseHTMLDataset,            # dataset instance 
         pipeline:BasePipeline,        # model or processing pipeline instance
         evaluator:Evaluator,       # evaluator instance
     ):
-        self.data:BaseHTMLDataset = data
-        self.pipeline:BasePipeline = pipeline
-        self.evaluator:Evaluator  = evaluator
+        self.data      = data
+        self.pipeline  = pipeline
+        self.evaluator = evaluator
         
+        # Connecting the Modules to the Experiment
+        self.pipeline.set_experiment(self)
+        self.evaluator.set_experiment(self)
+        self.data.set_experiment(self)
         # TODO MLflow
 
     def run(self, batch_size: Optional[int] = None, shuffle: bool = False) -> Dict[str, Any]:

@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 import os
 from htmlrag import clean_html
 from html_chunking import get_html_chunks
-
+from eval.experiment import Experiment
 
 class BasePreprocessor:
     DEFAULT_REMOVE_TAGS = ("script", "style")
@@ -27,6 +27,14 @@ class BasePreprocessor:
         self.strip_links = bool(self.config.get("strip_links", True))
         self.extra_remove_tags = list(self.config.get("extra_remove_tags", ["header", "footer"]))
         self.timeout = int(self.config.get("timeout", 15))
+
+        self.experiment = None 
+    
+    def set_experiment(self, experiment: Experiment) -> None:
+        """
+        Set the experiment instance for logging or other purposes.
+        """
+        self.experiment = experiment
 
     def _fetch_content(self, url: str) -> str:
         headers = {
@@ -75,6 +83,8 @@ class BasePreprocessor:
         lines = [line for line in text.splitlines() if line.strip()]
         clean_text = '\n'.join(lines)
         clean_text = re.sub(r'\s+', ' ', clean_text)
+        # Using htmlrag cleaning for extra measures
+        clean_text = clean_html(clean_text)
         return clean_text.strip()
 
     def chunk_content(self, content: str, max_tokens: int = 500, is_clean: bool = True, attr_cutoff_len: int = 5) -> List[str]:

@@ -11,11 +11,11 @@
 - [ ] Implement a `DEBUG MODE` to profile and identify performance bottlenecks
 
 ### **Datasets & Preprocessing**
-- [ ] **Preprocessor**
-    - [ ] Improve the general preprocessing pipeline
+- [ ] **Postprocessor**
+    - [ ] Improve the general pipeline
     - [ ] Implement the specific improvement we previously discussed
 - [ ] **Datasets**
-    - [ ] Add support for the SWDE dataset
+    - [X] Add support for the SWDE dataset
 
 ### **Models & AI Generation**
 - [ ] **Model Integration & Fine-Tuning**

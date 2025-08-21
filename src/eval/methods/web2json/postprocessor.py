@@ -6,6 +6,7 @@ from json_repair import repair_json
 import polars as pl
 import os
 import multiprocessing as mp
+from eval.experiment import Experiment
 mp.set_start_method("spawn", force=True)
 
 
@@ -46,7 +47,13 @@ def _extract_and_repair_json(response: str) -> dict:
 
 class PostProcessor:
     def __init__(self):
-        pass
+        self.experiment = None 
+    
+    def set_experiment(self, experiment: Experiment) -> None:
+        """
+        Set the experiment instance for logging or other purposes.
+        """
+        self.experiment = experiment
 
     def process(self, response: str) -> dict:
         """Single response, backward-compatible."""
@@ -58,7 +65,7 @@ class PostProcessor:
         n_workers: Optional[int] = None,
         use_process: bool = True,
         chunksize: int = 1,
-        show_progress: bool = False,
+        show_progress: bool = True,
     ) -> List[dict]:
         """
         Process an iterable of response strings in parallel and return a list of dicts.

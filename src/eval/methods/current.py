@@ -33,7 +33,11 @@ class RerankerPipeline(BasePipeline):
                 "answer": "extracted answer",
             }}
             ```
-            Return the JSON object now. DO NOT output anything else."""
+            The answer should contain the extracted information as complete and accurate to the content as possible.
+            Return the JSON object now. DO NOT output anything else.
+            
+            IF YOU FAIL YOUR ENTIRE FAMILY WILL BE DEAD. DO NOT FAIL.
+            """
         )
         self.postprocessor = PostProcessor()
 

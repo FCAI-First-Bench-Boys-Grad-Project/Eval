@@ -1,17 +1,12 @@
 
-from functools import wraps
 import polars as pl
-from langchain_core.documents import Document
 from abc import ABC, abstractmethod
-from typing import List, Dict ,Any
-from eval.methods.web2json.llm import LLMClient , NvidiaLLMClient
-import polars as pl
 import os
 import math
 import threading
 from typing import Any, Dict, List, Optional
-import polars as pl
 import torch
+from eval.experiment import Experiment
 
 class AIExtractor(ABC):
     def __init__(self, llm_client: Any, prompt_template: str):
@@ -28,7 +23,14 @@ class AIExtractor(ABC):
         """
         self.llm_client = llm_client
         self.prompt_template = prompt_template
+        self.experiment = None  # Placeholder for experiment instance
 
+    def set_experiment(self, experiment: Experiment) -> None:
+        """
+        Set the experiment instance for logging or other purposes.
+        """
+        self.experiment = experiment
+        
     @abstractmethod
     def extract(self, df: pl.DataFrame) -> pl.DataFrame:
         """
@@ -64,7 +66,7 @@ class RerankerExtractor(AIExtractor, ABC):
             "tensor_parallel_size": torch.cuda.device_count(),
             "quantization": "bitsandbytes",  # optional
             "gpu_memory_utilization": 0.7,
-            "max_model_len": 2464,
+            "max_model_len": 2048,
             "enable_prefix_caching": True,
         })
         # placeholders to be set by _load_reranker
