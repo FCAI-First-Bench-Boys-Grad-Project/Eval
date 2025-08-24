@@ -1,0 +1,128 @@
+extraction_prompt_template: |
+  You are an AI assistant whose job is to try to extract information from some chunk of text based on some given schema.
+  The required information is provided to you as a JSON Schema (example included below).
+  The chunk of text given is a preprocessed chunk of an HTML page, could be for an e-commerce product, medium article or any other source (example included below).
+  The required information might not exist in the chunk of text, if and only if this is the case, leave it as an empty string in the output (example included below).
+  The output you are required to give must strictly be in JSON format.
+  Keep the JSON Input Attribute AS IS, do not change the attributes.
+
+  ====
+  Example 1:
+  Input Chunk of Text:
+  Product Dimensions	14.06 x 5.91 x 1.5 inches
+  Item Weight	5.3 ounces
+  Manufacturer	Logitech
+  ASIN	B0DJCZDZXG
+  Country of Origin	China
+  Item model number	920-013133
+
+  Input Schema:
+  {{
+      "dimensions": {{"type": "string"}},
+      "price": {{"type": "number"}},
+      "manufacturer": {{"type": "string"}}
+  }}
+
+  Example of required output:
+  {{
+      "dimensions": "14.06 x 5.91 x 1.5 inches",
+      "price": "",
+      "manufacturer": "Logitech"
+  }}
+  ====
+  DO Not make nested objects in the output, only fill in the missing values only with either lists or strings or numbers (i.e. do not put your answer in "properties" attribute or anything like that).
+
+  Now for the problem at hand.
+  Given Schema:
+  {schema}
+
+  Given chunk of text:
+  {chunk}
+
+
+full-content-extraction-template: |
+  You are an AI assistant whose job is to extract information from some chunk of text based on some given schema.
+  The required information is provided to you as a JSON Schema.
+  The chunk of text given is a preprocessed chunk of an HTML page, could be for an e-commerce product, an article or any other source.
+  The required information might not exist in the chunk of text, if and only if this is the case, leave it as an empty string in the output.
+  The output you are required to give must strictly be in JSON format.
+  Keep the JSON Input Attribute AS IS, do not change the attributes.
+
+  Given Schema:
+  {schema}
+
+  Given chunk of text:
+  {chunk}
+
+
+gpt-extraction-extraction_prompt_template: |
+  You are an AI assistant that extracts information from a text chunk according to a given JSON Schema.
+
+  The text chunk comes from a preprocessed HTML page (e.g. product pages, articles, etc.).
+  If any information requested in the schema does not appear in the text, leave its value as an empty string in the output.
+  Do not invent or guess values.
+  The output must be valid JSON and match the structure and attribute names in the schema exactly.
+  Do not include any explanations or text outside the JSON.
+
+  Text:
+  {page}
+
+  Schema:
+  {schema}
+
+  Return JSON only.
+
+deepseek-extraction_prompt_template-thiking: |
+  ### INFORMATION EXTRACTION TASK ###
+  Extract EXACT values from the text chunk below according to the JSON SCHEMA. Output ONLY RAW JSON.
+
+  ## RULES ##
+  1. OUTPUT FORMAT: Strictly valid JSON matching schema keys
+  2. KEY MATCHING: Match schema keys to text labels using:
+    - Case-insensitive comparison
+    - Partial matching (e.g., "manufacturer" matches "Manufacturer")
+    - Synonym recognition (e.g., "dimensions" matches "Product Dimensions")
+  3. VALUE HANDLING:
+    - Extract text EXACTLY as shown (no modifications)
+    - If value spans multiple lines: include ALL relevant text
+    - If key is missing: use "" (empty string)
+  4. OUTPUT: ONLY JSON! No explanations or extra text
+
+  ## SCHEMA ##
+  {schema}
+
+  ## TEXT CHUNK ##
+  {chunk}
+
+deepseek-extraction_prompt_template-normal: |
+  Extract information from the text below strictly following these rules:
+  1. Use the provided schema to determine what to extract
+  2. Only extract information that exactly matches the schema attributes
+  3. If information is missing, use empty string ("")
+  4. Output must be valid JSON matching the schema structure
+  5. Never add or modify schema attributes
+  6. Preserve the original attribute names exactly
+
+  Schema:
+  {schema}
+
+  Text to process:
+  {chunk}
+
+  Output ONLY the JSON with extracted values, nothing else:
+
+qwen-extraction_prompt_template: |
+  You are a precise information extractor. Given a chunk of text from a document (e.g., product page, article), extract specific fields according to the provided JSON schema.
+
+  For each field in the schema:
+  If the value exists in the text, extract it exactly as it appears.
+  If the value is not present , return an empty string ("").
+  Do not infer or guess values that aren't explicitly stated.
+  Return only a valid JSON object matching the structure of the schema.
+  Do not change any field names or add/remove fields.
+  
+  Schema:
+  {schema}
+  
+  Text:
+  {chunk}

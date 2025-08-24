@@ -23,12 +23,12 @@ class Experiment:
         self.evaluator = evaluator
         
         # Connecting the Modules to the Experiment
-        self.pipeline.set_experiment(self)
-        self.evaluator.set_experiment(self)
-        self.data.set_experiment(self)
+        # self.pipeline.set_experiment(self)
+        # self.evaluator.set_experiment(self)
+        # self.data.set_experiment(self)
         # TODO MLflow
     
-    @app.task
+    # @app.task
     def run(self, batch_size: Optional[int] = None, shuffle: bool = False) -> Dict[str, Any]:
         """
         Run the experiment end-to-end:
