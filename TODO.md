@@ -15,22 +15,15 @@
 - [ ] **Postprocessor**
     - [ ] Improve the general pipeline
     - [ ] Implement the specific improvement we previously discussed
-- [ ] **Datasets**
-    - [X] Add support for the SWDE dataset
 
 ### **Models & AI Generation**
 - [ ] **Model Integration & Fine-Tuning**
     - [ ] Fine-Tune the generation model
     - [ ] Integrate and test the Gemma 3 270M model
-- [ ] **Inference & Optimization**
-    - [ ] Add vLLM as an option for AI generation (*Est. 20 mins*)
-    - [ ] Implement quantization for models where possible
 
 ### **Evaluation**
-- [ ] Develop and implement additional evaluation metrics
-- [ ] Create a page-level evaluation using MarkupLM on the SWDE dataset
-- [ ] Evaluate our custom model/system ("ours")
-- [ ] Embedder evaluation
+- [X] Create a page-level evaluation using MarkupLM on the SWDE dataset
+- [ ] Implement ("ours") after you finish getting some results
 
 ### **System Performance**
 - [ ] **(Pending)** Improve overall system speed

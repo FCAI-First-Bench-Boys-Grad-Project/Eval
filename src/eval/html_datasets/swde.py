@@ -14,8 +14,9 @@ class SWDEDataset(BaseHTMLDataset):
                 local_dir: str = "hf_websrc",
                 html_dir_in_repo: str = "files",
                 data_dir_in_repo: str = "data",
-                domain: str = "auto"): # Changed from 'ground_truth' for clarity
-        super().__init__()
+                domain: str = "auto",
+                indices: Optional[List[int]] = None): 
+        super().__init__(indices=indices)
     
         self.downloaded_repo_path = local_dir
         # 2. Define the paths to your HTML source and your Parquet data.
@@ -52,9 +53,9 @@ class SWDEDataset(BaseHTMLDataset):
             raise
         
         self._domain = domain
-        self.evaluation_metrics = []
+        self.evaluation_metrics = ['page_level_f1']
     
-    def __len__(self) -> int:
+    def _get_total_length(self) -> int:
         """Return number of samples"""
         return len(self.dataset[self._domain])
 
@@ -69,7 +70,7 @@ class SWDEDataset(BaseHTMLDataset):
         return self._domain
 
 
-    def __getitem__(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
+    def _get_item(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
         """Return (html, query, ground_truth) tuple for index"""
         if idx < 0 or idx >= len(self):
             raise IndexError("Index out of bounds")
@@ -94,29 +95,3 @@ class SWDEDataset(BaseHTMLDataset):
         return html, query, ground_truth
 
     
-    def __iter__(self) -> Iterator[Tuple[Optional[str], Optional[str], Any]]:
-        """Iterate over (html, query, ground_truth) tuples"""
-        for idx in range(len(self)):
-            yield self[idx]
-
-
-    def batch_iterator(
-        self, batch_size: int, shuffle: bool = False
-    ) -> Iterator[List[Tuple[Optional[str], Optional[str], Any]]]:
-        """Iterate over batches of (html, query, ground_truth) tuples"""
-        if shuffle:
-            indices = list(range(len(self)))
-            random.shuffle(indices)
-        else:
-            indices = range(len(self))
-
-        batch = []
-        for idx in indices:
-            batch.append(self[idx])
-            if len(batch) == batch_size:
-                yield batch
-                batch = []
-
-        # Yield the last batch if it has leftover samples
-        if batch:
-            yield batch

@@ -37,6 +37,10 @@ def is_not_null(x: Any) -> bool:
     """Robustly detect non-null value (supports pandas/polars/list/scalars)."""
     if x is None:
         return False
+    # string
+    if isinstance(x, str):
+        if x == "<NULL>" or x.strip() == "":
+            return False
     # pandas
     if isinstance(x, pd.Series):
         if x.empty:
@@ -181,12 +185,13 @@ class Matcher:
 # Metrics base class
 # --------------------------
 class Metric(ABC):
-    def __init__(self):
+    def __init__(self,evaluator: Evaluator):
         super().__init__()
 
         
         self._values: Dict[str, Any] = {}
         self._scores: Dict[str, List[float]] = {}
+        self.evaluator = evaluator  # Reference to the Evaluator instance
 
     @property
     def values(self) -> Dict[str, Any]:
@@ -269,7 +274,170 @@ class TokenF1(Metric):
         }
 
 
+class PageLevelF1(Metric):
+    def name(self) -> str:
+        return "page_level_f1"
+    
+    def calculate(self,
+                  pred: pl.Series,
+                  gt: pl.Series,
+                  parallel: bool = False,
+                  n_procs: int = 1) -> Dict[str, Any]:
+        """
+        Calculate page-level F1 score for json answers.
+        Implementing both Markuplm and swde evaluation method.
+        
+        I assume that pred and gt are polars Series containing Dict[str, Any] or similar structures.       
+        """
 
+        # Get the schema of the Domain
+        schema = gt.keys()
+        '''
+        results should contain:
+        website -> field -> {
+            'page_hits': int,
+            'extracted_pages': int,
+            'ground_truth_pages': int,
+            'f1': float,
+            'precision': float,
+            'recall': float
+        }
+        '''
+        results = {}
+        em_matcher = Matcher(MatcherConfig(is_fuzzy=False))
+        # fuzzy_matcher = Matcher(MatcherConfig(is_fuzzy=True, fuzzy_threshold=90)) # Maybe for later use
+
+        # TODO: might try to find a faster way to do this later
+        # Collect results per website and per field
+        for idx, (pred, gt) in enumerate(zip(pred.to_list(), gt.to_list())):
+            if not is_not_null(pred) or not is_not_null(gt):
+                continue
+            
+            current_website = self.evaluator.experiment.data[idx]['website_name']
+            # Iterate over each field in the schema
+            for field in schema:
+                pred_match_gt = em_matcher.compare(gt[field], pred[field])
+                if pred_match_gt:
+                    results[current_website][field]['page_hits'] += 1
+                if is_not_null(pred[field]):
+                    results[current_website][field]['extracted_pages'] += 1
+                if is_not_null(gt[field]):
+                    results[current_website][field]['ground_truth_pages'] += 1
+
+        # Calculate the scores for each field in each website
+        for website in results:
+            for field in results[website]:
+                extracted = results[website][field]['extracted_pages']
+                ground_truth = results[website][field]['ground_truth_pages']
+                page_hits = results[website][field]['page_hits']
+
+                if extracted == 0 or ground_truth == 0:
+                    f1 = 0.0
+                    precision = 0.0
+                    recall = 0.0
+                else:
+                    precision = page_hits / extracted
+                    recall = page_hits / ground_truth
+                    f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+
+                results[website][field]['f1'] = f1
+                results[website][field]['precision'] = precision
+                results[website][field]['recall'] = recall
+        '''
+        What I want to do is get the average of metrics for each 
+        '''
+        # Aggregate results
+
+        # Per-website aggregation
+        website_aggregated_results = {}
+        for website, fields in results.items():
+            f1_website = 0.0
+            precision_website = 0.0
+            recall_website = 0.0
+            total_fields = len(fields)
+            for field, metrics in fields.items():
+                f1_website += metrics['f1']
+                precision_website += metrics['precision']
+                recall_website += metrics['recall']
+            website_aggregated_results[website] = {
+                'f1': f1_website / total_fields if total_fields > 0 else 0.0,
+                'precision': precision_website / total_fields if total_fields > 0 else 0.0,
+                'recall': recall_website / total_fields if total_fields > 0 else 0.0
+            }
+        
+        # Per-field aggregation
+        # Goes through each field in the schema and averages the metric across all websites
+        '''
+        Camera --> (price , model , brand)
+        -> amazon for each attribute (f1, precision, recall)
+        -> bestbuy for each attribute (f1, precision, recall)
+        -> walmart for each attribute (f1, precision, recall)
+
+        now we need scores for attributes across websites
+        Normal Mean 
+        f1_price = (f1_price_amazon + f1_price_bestbuy + f1_price_walmart) / 3
+        Weighted Mean TODO: Add it later
+        f1_price = (f1_price_amazon * n_amazon + f1_price_bestbuy * n_bestbuy + f1_price_walmart * n_walmart) / (n_amazon + n_bestbuy + n_walmart)
+        '''
+
+        # This aggregates using Normal Mean 
+        field_aggregated_results = {}
+        for field in schema:
+            f1_field = 0.0
+            precision_field = 0.0
+            recall_field = 0.0
+            total_websites = 0
+            for website in results:
+                f1_field += results[website][field]['f1']
+                precision_field += results[website][field]['precision']
+                recall_field += results[website][field]['recall']
+                total_websites += 1
+            field_aggregated_results[field] = {
+                'f1': f1_field / total_websites if total_websites > 0 else 0.0,
+                'precision': precision_field / total_websites if total_websites > 0 else 0.0,
+                'recall': recall_field / total_websites if total_websites > 0 else 0.0
+            }
+
+        # Overall aggregation
+        f1_overall = 0.0
+        precision_overall = 0.0
+        recall_overall = 0.0
+        total_websites = len(website_aggregated_results)
+        for website, metrics in website_aggregated_results.items():
+            f1_overall += metrics['f1']
+            precision_overall += metrics['precision']
+            recall_overall += metrics['recall']
+        self._values['f1'] = f1_overall / total_websites if total_websites > 0 else 0.0
+        self._values['precision'] = precision_overall / total_websites if total_websites > 0 else 0.0
+        self._values['recall'] = recall_overall / total_websites if total_websites > 0 else 0.0 
+
+        self._scores = {
+            'website_aggregated_results': website_aggregated_results,
+            'field_aggregated_results': field_aggregated_results,
+            'overall': self._values
+        }
+
+        return {
+            "f1": {
+                'average': self._values['f1'],
+            },
+            "precision": {
+                'average': self._values['precision'],
+            },
+            "recall": {
+                'average': self._values['recall'],
+            }
+        }
+
+                
+            
+                
+        
+                
+
+            
+
+                
         
 
 
@@ -280,6 +448,7 @@ class Evaluator:
     METRIC_CLASSES = {
         "token_f1": TokenF1,
         # "em": ExatMatch,  # TODO: Implement ExactMatch
+        "page_level_f1": PageLevelF1,
     }
 
     def __init__(self, evaluation_metrics: List[str],
@@ -300,13 +469,20 @@ class Evaluator:
             if name not in self.METRIC_CLASSES:
                 raise KeyError(f"Unknown metric {name}")
             if name == "token_f1":
-                self.metrics.append(self.METRIC_CLASSES[name]())
+                self.metrics.append(self.METRIC_CLASSES[name](self))
     
     def get_metrics(self) -> List[Metric]:
         """
         Returns the list of instantiated metrics.
         """
         return self.metrics
+    
+    def set_experiment(self, experiment: Any):
+        """
+        Set the experiment context for the evaluator.
+        This can be used to log results, etc.
+        """
+        self.experiment = experiment
 
     def evaluate(self, pred: Any, gt: Any) -> Dict[str, Any]:
         if not is_not_null(pred) or not is_not_null(gt):

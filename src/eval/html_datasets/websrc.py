@@ -20,8 +20,10 @@ class WebSrcDataset(BaseHTMLDataset):
         - `element_id`: the id of the HTML element that contains the answer
         - `answer_start`: the start index of the answer in the HTML content
     """
-    def __init__(self, html_source_path: str, data_source_path: str):
-        super().__init__()
+    def __init__(self, html_source_path: str, 
+                 data_source_path: str,
+                 indices: Optional[List[int]] = None):
+        super().__init__(indices=indices)
         self.html_source_path = html_source_path
         self.data_source_path = data_source_path
         
@@ -37,12 +39,12 @@ class WebSrcDataset(BaseHTMLDataset):
                                 #    'em'
                                    ]  # Example metrics, adjust as needed
     
-    def __len__(self) -> int:
+    def _get_total_length(self) -> int:
         """Return number of samples"""
         return len(self.data_df)
 
     
-    def __getitem__(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
+    def _get_item(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
         """Return (html, query, ground_truth) tuple for index"""
         if idx < 0 or idx >= len(self):
             raise IndexError("Index out of bounds")
@@ -68,29 +70,3 @@ class WebSrcDataset(BaseHTMLDataset):
         return html, query, ground_truth
 
     
-    def __iter__(self) -> Iterator[Tuple[Optional[str], Optional[str], Any]]:
-        """Iterate over (html, query, ground_truth) tuples"""
-        for idx in range(len(self)):
-            yield self[idx]
-
-
-    def batch_iterator(
-        self, batch_size: int, shuffle: bool = False
-    ) -> Iterator[List[Tuple[Optional[str], Optional[str], Any]]]:
-        """Iterate over batches of (html, query, ground_truth) tuples"""
-        if shuffle:
-            indices = list(range(len(self)))
-            random.shuffle(indices)
-        else:
-            indices = range(len(self))
-
-        batch = []
-        for idx in indices:
-            batch.append(self[idx])
-            if len(batch) == batch_size:
-                yield batch
-                batch = []
-
-        # Yield the last batch if it has leftover samples
-        if batch:
-            yield batch
