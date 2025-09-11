@@ -209,7 +209,7 @@ class RerankerExtractor(AIExtractor, ABC):
 
     def _generate_output(self, batch: pl.DataFrame) -> pl.DataFrame:
         # Group by doc_id and concatenate chunks, while preserving the query column
-        df_grouped = batch.group_by("doc_id").agg([
+        df_grouped = batch.group_by("doc_id",maintain_order=True).agg([
             pl.concat_str("chunkcontent", separator="\n").alias("full_content"),
             pl.col("query").first().alias("query")  # Preserve the query column
         ])

@@ -4,7 +4,7 @@ import polars as pl
 from eval.methods.base import BasePipeline
 from eval.evaluator import Evaluator
 from eval.html_datasets.base import BaseHTMLDataset
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 from math import ceil
 from celery import Celery
 
@@ -24,7 +24,7 @@ class Experiment:
         
         # Connecting the Modules to the Experiment
         # self.pipeline.set_experiment(self)
-        # self.evaluator.set_experiment(self)
+        self.evaluator.set_experiment(self)
         # self.data.set_experiment(self)
         # TODO MLflow
     
@@ -61,9 +61,10 @@ class Experiment:
             # FIXME: Robustness against failure and failed indexes
             # print(f"Batch Shape {batch_df.shape}")
             pred = self.pipeline.extract(batch_df)
-            # print(pred)
+            
             predictions.extend(pred)
             ground_truths.extend(gt)
+            
 
         # print("Predictions")
         # print(predictions)
@@ -71,5 +72,8 @@ class Experiment:
         # print(ground_truths)
         
         # TODO MLFlow
-        results  = self.evaluator.evaluate(pl.Series(predictions), pl.Series(ground_truths))
+        print("Please Tell me this is not where the problem is")
+        print(f"Predictions Length: {pl.Series(predictions)}")
+        print(f"Ground Truths Length: {pl.Series(ground_truths)}")
+        results  = self.evaluator.evaluate(pl.Series(predictions,dtype=pl.Object), pl.Series(ground_truths))
         return predictions , ground_truths , results

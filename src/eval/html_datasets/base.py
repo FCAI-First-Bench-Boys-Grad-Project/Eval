@@ -28,7 +28,7 @@ class BaseHTMLDataset(ABC):
 
     def __getitem__(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
         """Return item, respecting subset if defined."""
-        if idx < 0 or idx >= len(self):
+        if idx < 0 or idx >= self._get_total_length():
             raise IndexError("Index out of bounds")
         real_idx = self._indices[idx] if self._indices is not None else idx
         return self._get_item(real_idx)
@@ -64,3 +64,7 @@ class BaseHTMLDataset(ABC):
         new_obj.__dict__.update(self.__dict__)  # copy state
         new_obj._indices = indices
         return new_obj
+    
+    def get_all_indices(self) -> List[int]:
+        """Return all valid indices in the dataset."""
+        return self._indices if self._indices is not None else list(range(self._get_total_length()))

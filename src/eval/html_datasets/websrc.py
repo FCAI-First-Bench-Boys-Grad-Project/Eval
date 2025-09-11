@@ -46,7 +46,7 @@ class WebSrcDataset(BaseHTMLDataset):
     
     def _get_item(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
         """Return (html, query, ground_truth) tuple for index"""
-        if idx < 0 or idx >= len(self):
+        if idx < 0 or idx >= self._get_total_length():
             raise IndexError("Index out of bounds")
         
         # Access the row as a dictionary for easier field access

@@ -11,7 +11,9 @@ import pandas as pd
 import polars as pl
 from abc import ABC, abstractmethod
 import concurrent.futures
+from json_repair import repair_json
 import math
+import json
 import os
 
 # Try to use rapidfuzz (faster) else fallback to fuzzywuzzy
@@ -110,7 +112,33 @@ def compute_f1_squad(a_gold: str, a_pred: str) -> Tuple[float, float, float]:
     f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
     return f1, prec, rec
 
-    
+def _repair_and_parse(s: str) -> dict:
+    """Robust parse: try json.loads, then repair_json->loads, then ast.literal_eval, else {}."""
+    if s is None:
+        return {}
+    # Fast attempt
+    try:
+        return json.loads(s)
+    except Exception:
+        pass
+
+    # Try json_repair then parse
+    try:
+        repaired = repair_json(s)
+        return json.loads(repaired)
+    except Exception:
+        pass
+
+    # Last resort: python literal eval for python-style dict strings
+    try:
+        obj = ast.literal_eval(s)
+        if isinstance(obj, (dict, list)):
+            return obj
+    except Exception:
+        pass
+
+    # Give up
+    return {}
 
 # --------------------------
 # Matcher (exact / fuzzy) # TODO: Add Embedder Evaluation
@@ -289,9 +317,14 @@ class PageLevelF1(Metric):
         
         I assume that pred and gt are polars Series containing Dict[str, Any] or similar structures.       
         """
+        # Turning the gt Series into a Series of Dict[str, Any]
+        if gt.dtype == pl.Utf8:
+            gt = gt.map_elements(_repair_and_parse, return_dtype=pl.Object)
 
+        print("Prediction ", pred)
+        print("Ground Truth ", gt)
         # Get the schema of the Domain
-        schema = gt.keys()
+        schema = gt[0].keys()
         '''
         results should contain:
         website -> field -> {
@@ -309,14 +342,33 @@ class PageLevelF1(Metric):
 
         # TODO: might try to find a faster way to do this later
         # Collect results per website and per field
+        print("Prediction Type", type(pred))
+        print("Ground Truth Type", type(gt))
+        dataset_valid_indices = self.evaluator.experiment.data.get_all_indices()
+        print("Dataset Valid Indices: ", dataset_valid_indices)
         for idx, (pred, gt) in enumerate(zip(pred.to_list(), gt.to_list())):
             if not is_not_null(pred) or not is_not_null(gt):
                 continue
-            
-            current_website = self.evaluator.experiment.data[idx]['website_name']
+            idx = dataset_valid_indices[idx]  # Map back to original index in dataset
+
+            print(f"Processing index {idx}")
+            print(self.evaluator.experiment.data.get_website_name(idx))
+            current_website = self.evaluator.experiment.data.get_website_name(idx)
             # Iterate over each field in the schema
             for field in schema:
                 pred_match_gt = em_matcher.compare(gt[field], pred[field])
+                # Initialize nested dicts if not present
+                if current_website not in results:
+                    results[current_website] = {}
+                if field not in results[current_website]:
+                    results[current_website][field] = {
+                        'page_hits': 0,
+                        'extracted_pages': 0,
+                        'ground_truth_pages': 0,
+                        'f1': 0.0,
+                        'precision': 0.0,
+                        'recall': 0.0
+                    }
                 if pred_match_gt:
                     results[current_website][field]['page_hits'] += 1
                 if is_not_null(pred[field]):
@@ -414,7 +466,8 @@ class PageLevelF1(Metric):
         self._scores = {
             'website_aggregated_results': website_aggregated_results,
             'field_aggregated_results': field_aggregated_results,
-            'overall': self._values
+            'overall': self._values,
+            'results': results
         }
 
         return {
@@ -468,8 +521,7 @@ class Evaluator:
         for name in evaluation_metrics:
             if name not in self.METRIC_CLASSES:
                 raise KeyError(f"Unknown metric {name}")
-            if name == "token_f1":
-                self.metrics.append(self.METRIC_CLASSES[name](self))
+            self.metrics.append(self.METRIC_CLASSES[name](self))
     
     def get_metrics(self) -> List[Metric]:
         """
@@ -493,7 +545,9 @@ class Evaluator:
         
         if not isinstance(gt, (list, pd.Series, pl.Series)):
             raise ValueError("gt must be a list, pandas Series, or polars Series")
-        
+        print("I swear if the problem is from here I will fruck you up")
+        print("Pred: ", pred)
+        print("GT: ", gt)
         # converting pl.Series if it's a list or pandas Series
         if isinstance(gt, (list, pd.Series)):
             gt = pl.Series(gt)
@@ -507,6 +561,8 @@ class Evaluator:
 
         results: Dict[str, Any] = {}
         for metric in self.metrics:
+            print("Calculating with Pred: ", pred)
+            print("Calculating with GT: ", gt)
             res = metric.calculate(pred, gt, parallel=self.parallel, n_procs=self.n_procs)
             results[metric.name()] = res
         

@@ -72,7 +72,7 @@ class SWDEDataset(BaseHTMLDataset):
 
     def _get_item(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
         """Return (html, query, ground_truth) tuple for index"""
-        if idx < 0 or idx >= len(self):
+        if idx < 0 or idx >= self._get_total_length():
             raise IndexError("Index out of bounds")
         
         row = self.dataset[self._domain][idx]
@@ -94,4 +94,11 @@ class SWDEDataset(BaseHTMLDataset):
         # Access the HTML content based on the domain and id
         return html, query, ground_truth
 
+    def get_website_name(self, idx: int) -> str:
+        """Return the website name for a given index."""
+        if idx < 0 or idx >= self._get_total_length():
+            raise IndexError("Index out of bounds")
+        
+        row = self.dataset[self._domain][idx]
+        return row['website_name']
     

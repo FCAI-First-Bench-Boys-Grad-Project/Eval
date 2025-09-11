@@ -5,9 +5,7 @@ import json
 from json_repair import repair_json
 import polars as pl
 import os
-import multiprocessing as mp
 from eval.experiment import Experiment
-mp.set_start_method("spawn", force=True)
 
 
 def _extract_and_repair_json(response: str) -> dict:
@@ -35,6 +33,11 @@ def _extract_and_repair_json(response: str) -> dict:
 
         repaired = repair_json(json_string)
         parsed = json.loads(repaired)
+
+        print('-'*80)
+        print(f"Original Response: {response}")
+        print(f"Parsed JSON: {parsed}")
+        print('-'*80)
 
         # Checking if the parsed JSON just contains a single key "answer"
         if isinstance(parsed, dict) and len(parsed) == 1 and "answer" in parsed:

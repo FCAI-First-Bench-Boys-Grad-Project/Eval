@@ -25,7 +25,16 @@ class RerankerPipeline(BasePipeline):
             Content:
             {content}
 
-            If the query is a schema, extract the information according to the schema.
+            If the query is a schema, extract the information according to the schema, meaning that for each field in the schema, you must extract the corresponding information from the content and fill it in the JSON object.
+            The JSON object should be structured as follows:
+            ```json
+            {{
+                "field1": "value1",
+                "field2": "value2",
+                ...
+            }}
+            ```
+            The values should contain the extracted information as complete and accurate to the content as possible.
             If the query is a question, extract the answer to the question from the content and return it in the JSON object.
             The JSON object should be structured as follows:
             ```json
@@ -46,14 +55,22 @@ class RerankerPipeline(BasePipeline):
         Extract information from a batch of content.
         """
         # Preprocess the batch
+        print(f"Batch PrePrecessing: {batch}")
+        print('='*80)
         preprocessed_batch = self.preprocessor.process_batch(batch,content_col='html',return_polars=True)
-
+        print(f"Preprocessed Batch: {preprocessed_batch}")
+        print('='*80)
         # Extract using AIExtractor
         extracted_data = self.extractor.extract(preprocessed_batch)
-        # print(f"Extracted Data: {extracted_data}")
+        print(f"Extracted Data: {extracted_data}")
+        print(f"Extracted Data Type: {extracted_data['response']}")
+        print('='*80)
+        
         # Post-process the extracted data
         postprocessed_data = self.postprocessor.process_dataframe(extracted_data)
-
+        print(f"Postprocessed Data: {postprocessed_data}")
+        print(f"Postprocessed Data Type: {type(postprocessed_data)}")
+        print('='*80)
         return postprocessed_data
         
 
