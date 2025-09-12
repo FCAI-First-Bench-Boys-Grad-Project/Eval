@@ -4,3 +4,4 @@ __pycache__
 data/
 *.html
 eval.egg-info/
+ignore*
