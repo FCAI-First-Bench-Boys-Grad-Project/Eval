@@ -32,6 +32,7 @@
 
 ## **Serious TODO**
 - [ ] A way to allow for the pipeline to change (like a config dictionary)
+- [ ] Add good schemas for the SWDE dataset
 - [ ] way to error analysis 
 - [ ] logging / cleaning / refactoring
 - [ ] Documentation 
