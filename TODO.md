@@ -20,6 +20,7 @@
 - [ ] **Model Integration & Fine-Tuning**
     - [ ] Fine-Tune the generation model
     - [ ] Integrate and test the Gemma 3 270M model
+- [ ] Seperate the prompts
 
 ### **Evaluation**
 - [X] Create a page-level evaluation using MarkupLM on the SWDE dataset
@@ -29,3 +30,8 @@
 - [ ] **(Pending)** Improve overall system speed
 - [ ] Logger to log everything, including Speed of each operation, or just use Pheonix
 
+## **Serious TODO**
+- [ ] A way to allow for the pipeline to change (like a config dictionary)
+- [ ] way to error analysis 
+- [ ] logging / cleaning / refactoring
+- [ ] Documentation 

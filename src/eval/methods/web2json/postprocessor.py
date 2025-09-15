@@ -1,6 +1,6 @@
 # postprocessor_polars.py
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional , Union
 import json
 from json_repair import repair_json
 import polars as pl
@@ -8,13 +8,17 @@ import os
 from eval.experiment import Experiment
 
 
-def _extract_and_repair_json(response: str) -> dict:
+
+def _extract_and_repair_json(response: Union[str,dict]) -> dict:
     """
     Worker function for processing a single LLM response.
     Returns a dict (empty dict on error). Top-level function for pickling.
     """
     if response is None:
         return {}
+    
+    if isinstance(response, dict):
+        return response  # already a dict
     try:
         json_string = response
 

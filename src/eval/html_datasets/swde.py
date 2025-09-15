@@ -6,7 +6,7 @@ from datasets import load_dataset
 from huggingface_hub import snapshot_download
 import os
 from datasets import DatasetDict
-
+#TODO: specify the avaliable domains
 class SWDEDataset(BaseHTMLDataset):
     
     

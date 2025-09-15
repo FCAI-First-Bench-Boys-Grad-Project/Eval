@@ -23,7 +23,7 @@ class Experiment:
         self.evaluator = evaluator
         
         # Connecting the Modules to the Experiment
-        # self.pipeline.set_experiment(self)
+        self.pipeline.set_experiment(self)
         self.evaluator.set_experiment(self)
         # self.data.set_experiment(self)
         # TODO MLflow
@@ -73,7 +73,10 @@ class Experiment:
         
         # TODO MLFlow
         print("Please Tell me this is not where the problem is")
-        print(f"Predictions Length: {pl.Series(predictions)}")
-        print(f"Ground Truths Length: {pl.Series(ground_truths)}")
+        # print(f"Predictions Length: {pl.Series(predictions)}")
+        # print(f"Ground Truths Length: {pl.Series(ground_truths)}")
+        
+
+        ground_truths = pl.Series(ground_truths)
         results  = self.evaluator.evaluate(pl.Series(predictions,dtype=pl.Object), pl.Series(ground_truths))
         return predictions , ground_truths , results
