@@ -13,6 +13,7 @@ from json_repair import repair_json
 import re
 from bs4 import BeautifulSoup, Tag, NavigableString
 from typing import Optional
+from rapidfuzz import fuzz, process
 
 def is_schema(text: str) -> bool:
     # Case 1: Python dict_keys
@@ -33,107 +34,6 @@ def is_schema(text: str) -> bool:
         return True
     
     return False
-
-def find_best_node_excluding_children(
-    html_text: str,
-    value: str,
-    *,
-    # Defaults changed: return plain text (no tags) by default
-    return_html_without_children: bool = False,
-    return_text_without_children: bool = True,
-    fallback_to_full_node_if_no_direct_text: bool = True
-) -> Optional[str]:
-    """
-    Find the node with best overlap to `value`, and return the node *without its child elements*.
-    Default: return the node's direct text (no tags, no child text).
-    - return_html_without_children=True -> returns HTML string of the node with child tags removed
-      (keeps node attributes, preserves direct text nodes only).
-    - return_text_without_children=True -> returns the direct text content only (no HTML).
-    - If no direct text exists under the chosen node:
-        - if fallback_to_full_node_if_no_direct_text True -> returns the full node text (descendant text).
-        - otherwise returns an empty string (honors "exclude children" strictly).
-    """
-    if not html_text or not value:
-        return None
-
-    soup = BeautifulSoup(html_text, "html.parser")
-    needle = value.strip().lower()
-
-    def words(s: str):
-        return re.findall(r"[A-Za-z0-9\-]+", s.lower())
-
-    target_words = words(needle)
-    if not target_words:
-        return None
-
-    def overlap_score(candidate: str, t_words: list[str]) -> float:
-        c_set = set(words(candidate))
-        t_set = set(t_words)
-        if not c_set or not t_set:
-            return 0.0
-        return len(c_set & t_set) / len(t_set)
-
-    candidates = []
-    for tag in soup.find_all():
-        # full_text: all descendant text joined (used for filtering & fallback)
-        full_text = " ".join(tag.stripped_strings).strip()
-        if needle not in full_text.lower():
-            continue
-
-        # gather direct text nodes only (recursive=False)
-        direct_parts = [s for s in tag.find_all(string=True, recursive=False) if s and s.strip()]
-        direct_text = " ".join(p.strip() for p in direct_parts).strip()
-
-        candidate_for_scoring = direct_text if direct_text else full_text
-        score = overlap_score(candidate_for_scoring, target_words)
-
-        candidates.append({
-            "score": score,
-            "full_text": full_text,
-            "direct_text": direct_text,
-            "direct_parts": direct_parts,  # list of NavigableString
-            "tag": tag
-        })
-
-    if not candidates:
-        return None
-
-    # choose best: highest score, then prefer smallest full_text (concise node)
-    best = max(candidates, key=lambda c: (c["score"], -len(c["full_text"])))
-
-    tag = best["tag"]
-    direct_text = best["direct_text"]
-    direct_parts = best["direct_parts"]
-    full_text = best["full_text"]
-
-    # If user wants HTML without children:
-    if return_html_without_children:
-        new_tag = soup.new_tag(tag.name)
-        for k, v in tag.attrs.items():
-            new_tag.attrs[k] = v
-
-        if direct_parts:
-            for part in direct_parts:
-                new_tag.append(NavigableString(part))
-            return str(new_tag)
-        else:
-            if fallback_to_full_node_if_no_direct_text:
-                return full_text
-            else:
-                return str(new_tag)  # empty tag with attributes
-
-    # If user wants plain text without children (default behavior):
-    if return_text_without_children:
-        if direct_text:
-            return direct_text
-        else:
-            if fallback_to_full_node_if_no_direct_text:
-                return full_text
-            else:
-                return ""  # strict exclude children
-
-    # Fallback (shouldn't be hit because of defaults)
-    return direct_text if direct_text else (full_text if fallback_to_full_node_if_no_direct_text else "")
 
 
 
@@ -368,6 +268,7 @@ class RerankerExtractor(AIExtractor, ABC):
         return df_response
 
 
+    #FIXME: think for a bit 
     def _extract_exact_target(self, df: pl.DataFrame) -> pl.DataFrame:
         def process_row(full_content: list[str], response: str , query: str):
             try:
@@ -389,26 +290,23 @@ class RerankerExtractor(AIExtractor, ABC):
                 raise ValueError(f"incorrect json format {response} , type of response ({type(response)})")
             print(f"Full Content: {full_content}")
             print(f"Preprocessed Response JSON: {response_json}")
+            
             results = {}
             is_query_schema = is_schema(query)
             for key, value in response_json.items():
                 if not value:
                     continue
-                best_match = None
-                best_score = -1
-                for html_text in full_content:
-                    candidate = find_best_node_excluding_children(html_text, str(value))
-                    print(f"Key: {key}, Value: {value}, Candidate: {candidate}")
-                    if candidate:
-                        # compute score again (safe guard)
-                        score = len(set(candidate.lower().split()) & set(str(value).lower().split())) / max(
-                            1, len(set(str(value).lower().split()))
-                        )
-                        if score > best_score:
-                            best_score = score
-                            best_match = candidate
+
+                # YES or NO
+            
+                candidates = []
+                for html_chunk in full_content:
+                    candidates.append(find_best_match(html_chunk, str(value)))
+                    
+
                 if not is_query_schema:
                     key = 'answer'
+
                 results[key] = best_match if best_match else value
             print(f"Extracted Targets: {results}")
             # turn it back to json string 
@@ -470,7 +368,7 @@ class RerankerExtractor(AIExtractor, ABC):
         print(f"Shape before: filter {norm_df.shape} ")
 
         # Filter the DataFrame based on the score threshold
-        filtered_df = self._filter(norm_df, threshold=0.5) #FIXME: errorrr
+        filtered_df = self._filter(norm_df, threshold=0.5)
         print(f"Shape before: generates {filtered_df.shape} ")
 
         generated_df = self._generate_output(filtered_df)

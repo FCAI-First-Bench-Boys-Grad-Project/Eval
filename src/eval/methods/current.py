@@ -12,7 +12,8 @@ class RerankerPipeline(BasePipeline):
         self.preprocessor = Preprocessor(chunk_size=500)
         self.extractor = RerankerExtractor(
             llm_client=NvidiaLLMClient(config={
-            "model_name": "qwen/qwen3-next-80b-a3b-thinking",
+            # "model_name": "qwen/qwen3-coder-480b-a35b-instruct",
+            "model_name": "google/gemma-3n-e2b-it",
             }),
             prompt_template="""You are an assistant that must ONLY respond with a single VALID JSON object (no markdown, no explanation, no extra text).
             Validate that the JSON is well-formed. If a requested field cannot be extracted, set it to null (or an empty list/object if the schema specifies).
@@ -26,6 +27,7 @@ class RerankerPipeline(BasePipeline):
             {content}
 
             If the query is a schema, extract the information according to the schema, meaning that for each field in the schema, you must extract the corresponding information from the content and fill it in the JSON object.
+            IF THE EXTRACTED ANSWER IS A SUBSET OF A NODE AND THE REST OF THE NODE'S CONTENT WILL PROVIDE A BETTER ANSWER INCLUDE IT.
             The JSON object should be structured as follows:
             ```json
             {{
@@ -37,6 +39,7 @@ class RerankerPipeline(BasePipeline):
 
             IF THE QUERY IS NOT A SCHEMA, EXTRACT THE MOST RELEVANT INFORMATION FROM THE CONTENT THAT ANSWERS THE QUERY.
             AND RETURN IT IN A JSON OBJECT WITH A SINGLE KEY "answer".
+            THE EXTRACTED ANSWER COULD BE A 'yes' or 'no'.
             The JSON object should be structured as follows:
             ```json
             {{
@@ -46,8 +49,8 @@ class RerankerPipeline(BasePipeline):
             The answer should contain the extracted information as complete and accurate to the content as possible.
             Return the JSON object now. DO NOT output anything else.
             
-            IF YOU FAIL YOUR ENTIRE FAMILY WILL BE DEAD. DO NOT FAIL.
             STICK TO THE ANSWER SCHEMA IF NO SCHEMA IS PROVIDED
+
             """
         )
         self.postprocessor = PostProcessor()

@@ -1,16 +1,32 @@
 from abc import ABC, abstractmethod
-from typing import Iterator, List, Optional, Tuple, Any
+from typing import Iterator, List, Optional
+from eval.configs.dataset_config import BaseDatasetConfig
+
+class Sample(dict):
+    """A single sample from the dataset."""
+    sample_id: str
+    html_content: str
+    query: str
+    ground_truth: str
+
+    def __getitem__(self, key):
+        # tuple-style indexing
+        if isinstance(key, int):  
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
 
 
 class BaseHTMLDataset(ABC):
-    def __init__(self, indices: Optional[List[int]] = None):
+    def __init__(self, config: BaseDatasetConfig):
         """
         Base class for HTML datasets with optional subset support.
         
         Args:
             indices: Optional list of indices to restrict the dataset to a subset.
         """
-        self._indices: Optional[List[int]] = indices
+        self._config: BaseDatasetConfig = config
+        self._indices: Optional[List[int]] = config.indices
 
     @abstractmethod
     def _get_total_length(self) -> int:
@@ -18,7 +34,7 @@ class BaseHTMLDataset(ABC):
         pass
 
     @abstractmethod
-    def _get_item(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
+    def _get_item(self, idx: int) -> Sample:
         """Return (html, query, ground_truth) for raw index (ignores subset)."""
         pass
 
@@ -26,36 +42,30 @@ class BaseHTMLDataset(ABC):
         """Return number of samples (considering subset if defined)."""
         return len(self._indices) if self._indices is not None else self._get_total_length()
 
-    def __getitem__(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
+    def __getitem__(self, idx: int) -> Sample:
         """Return item, respecting subset if defined."""
         if idx < 0 or idx >= self._get_total_length():
             raise IndexError("Index out of bounds")
         real_idx = self._indices[idx] if self._indices is not None else idx
         return self._get_item(real_idx)
 
-    def __iter__(self) -> Iterator[Tuple[Optional[str], Optional[str], Any]]:
+    def __iter__(self) -> Iterator[Sample]:
         """Iterate over dataset (respecting subset)."""
         for idx in range(len(self)):
             yield self[idx]
 
     def batch_iterator(
         self, batch_size: int, shuffle: bool = False
-    ) -> Iterator[List[Tuple[Optional[str], Optional[str], Any]]]:
+    ) -> Iterator[List[Sample]]:
         """Iterate over batches (respecting subset)."""
         import random
 
-        indices = list(range(len(self)))
+        indices = self.get_all_indices()
         if shuffle:
             random.shuffle(indices)
 
-        batch = []
-        for idx in indices:
-            batch.append(self[idx])
-            if len(batch) == batch_size:
-                yield batch
-                batch = []
-        if batch:
-            yield batch
+        for i in range(0, len(indices), batch_size):
+            yield [self[j] for j in indices[i:i+batch_size]]
 
     def subset(self, indices: List[int]) -> "BaseHTMLDataset":
         """Return a new dataset object restricted to the given indices."""

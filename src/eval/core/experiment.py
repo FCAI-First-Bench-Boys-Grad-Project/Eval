@@ -1,23 +1,25 @@
 from typing import Optional, Dict, Any
 import polars as pl
-# from tqdm import tqdm
 from eval.methods.base import BasePipeline
-from eval.evaluator import Evaluator
+from eval import Evaluator
 from eval.html_datasets.base import BaseHTMLDataset
+from eval.util.seed import set_seed
 from tqdm.auto import tqdm
 from math import ceil
-from celery import Celery
 
-app = Celery("experiments", broker="redis://localhost:6379")
+
 
 
 class Experiment:
     def __init__(
-        self, 
-        data:BaseHTMLDataset,            # dataset instance 
-        pipeline:BasePipeline,        # model or processing pipeline instance
-        evaluator:Evaluator,       # evaluator instance
+        self,
+        config: Dict[str, Any],  # configuration dictionary
     ):
+        self.config = config
+
+
+
+
         self.data      = data
         self.pipeline  = pipeline
         self.evaluator = evaluator
@@ -36,6 +38,7 @@ class Experiment:
         - Pass data through pipeline to get predictions
         - Evaluate predictions against ground truths
         """
+        set_seed(42)  # For reproducibility
 
         predictions = []
         ground_truths = []

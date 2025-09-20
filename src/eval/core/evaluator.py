@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import string
 import ast
-import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Iterable
 from collections import Counter, OrderedDict
@@ -12,9 +11,10 @@ import polars as pl
 from abc import ABC, abstractmethod
 import concurrent.futures
 from json_repair import repair_json
-import math
 import json
-import os
+import html
+import textwrap
+
 
 # Try to use rapidfuzz (faster) else fallback to fuzzywuzzy
 try:
@@ -147,15 +147,30 @@ class Matcher:
     def __init__(self, cfg: Optional[MatcherConfig] = None):
         self.cfg = cfg or MatcherConfig()
 
+
+
     def _normalize_gt(self, gt: Any) -> List[Any]:
         """
         Turn GT into list of candidates:
-         - If list -> return list filtered for non-null
-         - If string begins with '[' parse literal -> list
-         - Else single-item list
+        - If list -> return list filtered for non-null
+        - If string begins with '[' parse literal -> list
+        - Else single-item list
+        Normalization includes:
+        - HTML unescaping (&amp; -> &)
+        - Dedenting multi-line text
+        - Stripping leading/trailing whitespace
         """
+        def clean_text(x: str) -> str:
+            if not isinstance(x, str):
+                return x
+            x = textwrap.dedent(x)              # remove indentation
+            x = html.unescape(x)                # decode &amp; etc.
+            x = re.sub(r'\s+', ' ', x).strip()  # normalize spaces
+            return x
+
         if not is_not_null(gt) and not (isinstance(gt, str) and gt.strip().startswith("[")):
             return []
+
         if isinstance(gt, list):
             items = gt
         elif isinstance(gt, str):
@@ -169,7 +184,10 @@ class Matcher:
                 items = [gt]
         else:
             items = [gt]
-        return [it for it in items if is_not_null(it)]
+
+        # normalize each item
+        return [clean_text(it) for it in items if is_not_null(it)]
+
 
     def compare(self, gt: Any, pred: Any) -> bool:
         """
@@ -356,7 +374,11 @@ class PageLevelF1(Metric):
             current_website = self.evaluator.experiment.data.get_website_name(idx)
             # Iterate over each field in the schema
             for field in schema:
-                pred_match_gt = em_matcher.compare(gt[field], pred[field])
+                try:
+                    pred_match_gt = em_matcher.compare(gt[field], pred[field])
+                except:
+                    print(f"There is an error with field {field}. GT:{gt} and Pred:{pred}")
+                    pred_match_gt = False
                 # Initialize nested dicts if not present
                 if current_website not in results:
                     results[current_website] = {}
@@ -371,9 +393,9 @@ class PageLevelF1(Metric):
                     }
                 if pred_match_gt:
                     results[current_website][field]['page_hits'] += 1
-                if is_not_null(pred[field]):
+                if is_not_null(pred) and is_not_null(pred[field]):
                     results[current_website][field]['extracted_pages'] += 1
-                if is_not_null(gt[field]):
+                if is_not_null(gt) and is_not_null(gt[field]):
                     results[current_website][field]['ground_truth_pages'] += 1
 
         # Calculate the scores for each field in each website

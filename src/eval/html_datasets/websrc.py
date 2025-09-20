@@ -1,7 +1,6 @@
-from eval.html_datasets.base import BaseHTMLDataset
-from typing import Iterator, List, Optional, Tuple, Any
+from eval.html_datasets.base import BaseHTMLDataset , Sample
+from eval.configs.dataset_config import WebSrcConfig
 import polars as pl
-import random
 
 class WebSrcDataset(BaseHTMLDataset):
     """
@@ -20,31 +19,27 @@ class WebSrcDataset(BaseHTMLDataset):
         - `element_id`: the id of the HTML element that contains the answer
         - `answer_start`: the start index of the answer in the HTML content
     """
-    def __init__(self, html_source_path: str, 
-                 data_source_path: str,
-                 indices: Optional[List[int]] = None):
-        super().__init__(indices=indices)
-        self.html_source_path = html_source_path
-        self.data_source_path = data_source_path
+    def __init__(self, config: WebSrcConfig):
+
+        super().__init__(config=config)
+        self.html_source_path = config.html_source_path
+        self.data_source_path = config.data_source_path
         
-        # Use pl.read_ndjson for reading JSONL (newline-delimited JSON) files
-        self.html_content_df = pl.read_ndjson(html_source_path)
-        self.data_df = pl.read_ndjson(data_source_path)
+        self.html_content_df = pl.read_ndjson(self.html_source_path)
+        self.data_df = pl.read_ndjson(self.data_source_path)
         
-        # Initialize other necessary attributes, e.g., loading data from source
-        self.abb_to_domain = {row['domain'][:2]: row['domain'] for row in self.html_content_df.to_dicts()}
+        self.abbreviation_to_domain = {row['domain'][:2]: row['domain'] for row in self.html_content_df.to_dicts()}
         
-        # it needs to match the names used in the evaluation script
         self.evaluation_metrics = ['token_f1',
                                 #    'em'
-                                   ]  # Example metrics, adjust as needed
+                                   ]
     
     def _get_total_length(self) -> int:
         """Return number of samples"""
         return len(self.data_df)
 
     
-    def _get_item(self, idx: int) -> Tuple[Optional[str], Optional[str], Any]:
+    def _get_item(self, idx: int) -> Sample:
         """Return (html, query, ground_truth) tuple for index"""
         if idx < 0 or idx >= self._get_total_length():
             raise IndexError("Index out of bounds")
@@ -53,20 +48,19 @@ class WebSrcDataset(BaseHTMLDataset):
         row = self.data_df[idx].to_dicts()[0]
         
         domain_abb = row['id'][:2]
-        domain = self.abb_to_domain.get(domain_abb)
+        domain = self.abbreviation_to_domain.get(domain_abb)
         website_id = int(row['id'][2:9])
 
-        if domain is None:
-            return None, row["question"], row["answer"]
-        
         html_row_df = self.html_content_df.filter(
             (pl.col('domain') == domain) & 
             (pl.col('id').cast(pl.Int32) == website_id)
         )
         
-        html = html_row_df['html'][0] if not html_row_df.is_empty() else None
-        query = row['question']
-        ground_truth = row['answer']  # Adjust based on your evaluation needs
-        return html, query, ground_truth
+        return Sample({
+            "sample_id": row['id'],
+            "html_content": html_row_df['html'][0] if not html_row_df.is_empty() else None,
+            "query": row['question'],
+            "ground_truth": row['answer']
+        })
 
     
