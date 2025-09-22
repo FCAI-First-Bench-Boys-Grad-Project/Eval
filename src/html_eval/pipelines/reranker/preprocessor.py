@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 import os
 from htmlrag import clean_html
 from html_chunking import get_html_chunks
-from eval.experiment import Experiment
+from html_eval.experiment import Experiment
 
 class BasePreprocessor:
     DEFAULT_REMOVE_TAGS = ("script", "style")

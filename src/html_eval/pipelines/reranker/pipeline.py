@@ -1,9 +1,9 @@
-from eval.methods.base import BasePipeline
-from eval.methods.web2json.ai_extractor import *
-from eval.methods.web2json.preprocessor import *
-from eval.methods.web2json.postprocessor import *
-from eval.methods.web2json.llm import *
-from pydantic import BaseModel
+from html_eval.pipelines.base_pipeline import BasePipeline
+from html_eval.pipelines.reranker.ai_extractor import *
+from html_eval.pipelines.reranker.preprocessor import *
+from html_eval.pipelines.reranker.postprocessor import *
+from html_eval.pipelines.reranker.llm import *
+
 class RerankerPipeline(BasePipeline):
     
     def __init__(self):

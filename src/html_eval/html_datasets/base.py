@@ -1,20 +1,36 @@
 from abc import ABC, abstractmethod
 from typing import Iterator, List, Optional
-from eval.configs.dataset_config import BaseDatasetConfig
+from html_eval.configs.dataset_config import BaseDatasetConfig
+
+
 
 class Sample(dict):
-    """A single sample from the dataset."""
-    sample_id: str
+    """
+    A single sample from the dataset.
+    Acts like both a dict and an object with attributes.
+    """
+    id: str
     html_content: str
     query: str
     ground_truth: str
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.__dict__.update(kwargs)
+
     def __getitem__(self, key):
-        # tuple-style indexing
-        if isinstance(key, int):  
+        # tuple-style indexing (by position)
+        if isinstance(key, int):
             return list(self.values())[key]
         return super().__getitem__(key)
 
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.__dict__[key] = value  # keep attributes in sync
+
+    def __setattr__(self, key, value):
+        super().__setitem__(key, value)
+        super().__setattr__(key, value)
 
 
 class BaseHTMLDataset(ABC):
@@ -27,6 +43,7 @@ class BaseHTMLDataset(ABC):
         """
         self._config: BaseDatasetConfig = config
         self._indices: Optional[List[int]] = config.indices
+        self.evaluation_metrics: List[str] = config.evaluation_metrics
 
     @abstractmethod
     def _get_total_length(self) -> int:

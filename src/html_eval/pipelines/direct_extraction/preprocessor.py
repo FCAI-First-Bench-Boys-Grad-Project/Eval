@@ -2,7 +2,7 @@ import trafilatura
 import polars as pl
 import multiprocessing
 from bs4 import BeautifulSoup, Comment
-from ..web2json.preprocessor import BasePreprocessor
+from ..reranker.preprocessor import BasePreprocessor
 from typing import Union, List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 

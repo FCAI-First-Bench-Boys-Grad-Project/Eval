@@ -6,7 +6,7 @@ import math
 import threading
 from typing import Any, Dict, List, Optional
 import torch
-from eval.experiment import Experiment
+from html_eval.experiment import Experiment
 from lxml import html
 import json
 from json_repair import repair_json

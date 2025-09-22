@@ -31,8 +31,9 @@
 - [ ] Logger to log everything, including Speed of each operation, or just use Pheonix
 
 ## **Serious TODO**
-- [ ] A way to allow for the pipeline to change (like a config dictionary)
-- [ ] Add good schemas for the SWDE dataset
-- [ ] way to error analysis 
+- [ ] let the node selection be based on the fuzzy match
+- [~] WebSRC didn't count for the yes or no case
 - [ ] logging / cleaning / refactoring
+    - [ ] A way to allow for the pipeline to change (like a config dictionary)
+- [ ] way to error analysis 
 - [ ] Documentation 

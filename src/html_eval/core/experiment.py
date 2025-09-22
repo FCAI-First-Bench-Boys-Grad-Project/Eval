@@ -1,9 +1,10 @@
 from typing import Optional, Dict, Any
 import polars as pl
-from eval.methods.base import BasePipeline
-from eval import Evaluator
-from eval.html_datasets.base import BaseHTMLDataset
-from eval.util.seed import set_seed
+from html_eval.configs.experiment_config import ExperimentConfig 
+from html_eval.pipelines.base_pipeline import BasePipeline
+from html_eval import Evaluator
+from html_eval.html_datasets.base import BaseHTMLDataset
+from html_eval.util.seed import set_seed
 from tqdm.auto import tqdm
 from math import ceil
 
@@ -11,16 +12,12 @@ from math import ceil
 
 
 class Experiment:
-    def __init__(
-        self,
-        config: Dict[str, Any],  # configuration dictionary
-    ):
-        self.config = config
+    def __init__(self,config: ExperimentConfig):
+        self._config = config
+        
+        set_seed(self._config.seed)
+        self.data: BaseHTMLDataset = config.dataset_config.create_dataset()
 
-
-
-
-        self.data      = data
         self.pipeline  = pipeline
         self.evaluator = evaluator
         

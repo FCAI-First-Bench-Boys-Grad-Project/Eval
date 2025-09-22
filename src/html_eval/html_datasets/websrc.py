@@ -1,5 +1,5 @@
-from eval.html_datasets.base import BaseHTMLDataset , Sample
-from eval.configs.dataset_config import WebSrcConfig
+from html_eval.html_datasets.base import BaseHTMLDataset , Sample
+from html_eval.configs.dataset_config import WebSrcConfig
 import polars as pl
 
 class WebSrcDataset(BaseHTMLDataset):
@@ -30,9 +30,6 @@ class WebSrcDataset(BaseHTMLDataset):
         
         self.abbreviation_to_domain = {row['domain'][:2]: row['domain'] for row in self.html_content_df.to_dicts()}
         
-        self.evaluation_metrics = ['token_f1',
-                                #    'em'
-                                   ]
     
     def _get_total_length(self) -> int:
         """Return number of samples"""
@@ -57,7 +54,7 @@ class WebSrcDataset(BaseHTMLDataset):
         )
         
         return Sample({
-            "sample_id": row['id'],
+            "id": row['id'],
             "html_content": html_row_df['html'][0] if not html_row_df.is_empty() else None,
             "query": row['question'],
             "ground_truth": row['answer']

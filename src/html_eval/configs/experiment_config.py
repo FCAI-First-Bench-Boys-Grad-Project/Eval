@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from eval.configs.pipeline_config import BasePipelineConfig
-from eval.configs.dataset_config import BaseDatasetConfig
+from html_eval.configs.pipeline_config import BasePipelineConfig
+from html_eval.configs.dataset_config import BaseDatasetConfig
 
 @dataclass
 class ExperimentConfig:

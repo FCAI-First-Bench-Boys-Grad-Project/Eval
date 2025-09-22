@@ -7,7 +7,7 @@ import multiprocessing
 from stamina import retry
 from typing import Dict, Any
 from dotenv import load_dotenv
-from ..base import BasePipeline
+from ..base_pipeline import BasePipeline
 from json_repair import json_repair
 from ...experiment import Experiment
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
@@ -17,7 +17,7 @@ from langchain_core.documents import Document
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
-from src.eval.methods.direct_extraction.Preprocessor import Preprocessor
+from html_eval.pipelines.direct_extraction.preprocessor import Preprocessor
 
 class DirectExtraction(BasePipeline):
     def __init__(self, preprocessor: Preprocessor, llm: BaseChatModel, cpu_workers:int=multiprocessing.cpu_count(), **kwargs):

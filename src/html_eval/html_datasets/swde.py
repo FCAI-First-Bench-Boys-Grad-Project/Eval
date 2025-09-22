@@ -1,6 +1,6 @@
-from eval.html_datasets.base import BaseHTMLDataset , Sample
-from eval.configs.dataset_config import SWDEConfig
-from typing import List, Optional
+from html_eval.html_datasets.base import BaseHTMLDataset , Sample
+from html_eval.configs.dataset_config import SWDEConfig
+from typing import List
 from datasets import load_dataset
 import os
 
@@ -19,22 +19,7 @@ class SWDEDataset(BaseHTMLDataset):
     def __init__(self,config: SWDEConfig):
         super().__init__(config=config)
 
-        local_dir = config.local_dir
-        html_dir_in_repo = config.html_dir_in_repo
-        data_dir_in_repo = config.data_dir_in_repo
-        domain = config.domain
-    
-        self.local_dir = local_dir
-        self.html_source_path = os.path.join(self.local_dir, html_dir_in_repo)
-        self.data_source_path = os.path.join(self.local_dir, data_dir_in_repo)
-
-        
-        if not os.path.isdir(self.html_source_path):
-            raise FileNotFoundError(f"HTML directory not found in repo: {self.html_source_path}")
-        if not os.path.isdir(self.data_source_path):
-            raise FileNotFoundError(f"Data directory not found in repo: {self.data_source_path}")
-        if not [f for f in os.listdir(os.path.join(self.local_dir, html_dir_in_repo)) if not f.endswith(".7z")]:
-            raise ValueError(f"No HTML folder files found in the directory: {self.html_source_path}. Please ensure to unzip the files.")
+        self._domain = config.domain
 
         # Load all subsets (domains) and combine into a single DatasetDict
         try:
@@ -52,8 +37,6 @@ class SWDEDataset(BaseHTMLDataset):
             print(f"Could not load dataset from {self.data_source_path}. Error: {e}")
             raise  
         
-        self._domain = domain
-        self.evaluation_metrics = ['page_level_f1']
     
     def _get_total_length(self) -> int:
         """Return number of samples"""
@@ -87,7 +70,7 @@ class SWDEDataset(BaseHTMLDataset):
         if not os.path.isfile(file_path):
             print(f"HTML file not found for id {row['website_id']} at path: {file_path}")
             return Sample({
-                "sample_id": row['website_id'],
+                "id": row['website_id'],
                 "html_content": None,
                 "query": row['schema'],
                 "ground_truth": row['gt']
@@ -98,7 +81,7 @@ class SWDEDataset(BaseHTMLDataset):
 
         # Access the HTML content based on the domain and id
         return Sample({
-            "sample_id": row['website_id'],
+            "id": row['website_id'],
             "html_content": html,
             "query": row['schema'],
             "ground_truth": row['gt']
