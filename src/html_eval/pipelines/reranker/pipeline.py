@@ -1,69 +1,33 @@
 from html_eval.pipelines.base_pipeline import BasePipeline
-from html_eval.pipelines.reranker.ai_extractor import *
-from html_eval.pipelines.reranker.preprocessor import *
-from html_eval.pipelines.reranker.postprocessor import *
-from html_eval.pipelines.reranker.llm import *
+from html_eval.pipelines.reranker.preprocessor import BasePreprocessor
+from html_eval.pipelines.reranker.ai_extractor import AIExtractor
+from html_eval.pipelines.reranker.postprocessor import PostProcessor
+from html_eval.configs.pipeline_config import RerankerPipelineConfig
+from html_eval.core.types import Sample, SamplePrediction
+from typing import List
 
 class RerankerPipeline(BasePipeline):
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self,config:RerankerPipelineConfig):
+        super().__init__(config=config)
 
-        self.preprocessor = Preprocessor(chunk_size=500)
-        self.extractor = RerankerExtractor(
-            llm_client=NvidiaLLMClient(config={
-            # "model_name": "qwen/qwen3-coder-480b-a35b-instruct",
-            "model_name": "google/gemma-3n-e2b-it",
-            }),
-            prompt_template="""You are an assistant that must ONLY respond with a single VALID JSON object (no markdown, no explanation, no extra text).
-            Validate that the JSON is well-formed. If a requested field cannot be extracted, set it to null (or an empty list/object if the schema specifies).
+        self.preprocessor = BasePreprocessor(config=self.config.preprocessor_config)
+        self.preprocessor.set_experiment(self.experiment)
 
-            Now extract information according below.
+        self.extractor = AIExtractor(config=self.config.extractor_config)
+        self.extractor.set_experiment(self.experiment)
 
-            Query:
-            {query}
-
-            Content:
-            {content}
-
-            If the query is a schema, extract the information according to the schema, meaning that for each field in the schema, you must extract the corresponding information from the content and fill it in the JSON object.
-            IF THE EXTRACTED ANSWER IS A SUBSET OF A NODE AND THE REST OF THE NODE'S CONTENT WILL PROVIDE A BETTER ANSWER INCLUDE IT.
-            The JSON object should be structured as follows:
-            ```json
-            {{
-                "field1": "value1",
-                "field2": "value2",
-                ...
-            }}
-            ```
-
-            IF THE QUERY IS NOT A SCHEMA, EXTRACT THE MOST RELEVANT INFORMATION FROM THE CONTENT THAT ANSWERS THE QUERY.
-            AND RETURN IT IN A JSON OBJECT WITH A SINGLE KEY "answer".
-            THE EXTRACTED ANSWER COULD BE A 'yes' or 'no'.
-            The JSON object should be structured as follows:
-            ```json
-            {{
-                "answer": "extracted answer",
-            }}
-            ```
-            The answer should contain the extracted information as complete and accurate to the content as possible.
-            Return the JSON object now. DO NOT output anything else.
-            
-            STICK TO THE ANSWER SCHEMA IF NO SCHEMA IS PROVIDED
-
-            """
-        )
         self.postprocessor = PostProcessor()
 
-    def extract(self, batch: pl.DataFrame) -> List[dict]:
+    def extract(self, batch: List[Sample]) -> List[SamplePrediction]:
         """
         Extract information from a batch of content.
         """
         # Preprocess the batch
         print(f"Batch PrePrecessing: {batch}")
         print('='*80)
-        preprocessed_batch = self.preprocessor.process_batch(batch,content_col='html',return_polars=True)
-        print(f"Preprocessed Batch: {preprocessed_batch}")
+        preprocessed_batch = self.preprocessor.process(batch)
+        print(f"++++++++++EXPERIMENT Preprocessed Batch: {preprocessed_batch}")
         print('='*80)
         # Extract using AIExtractor
         extracted_data = self.extractor.extract(preprocessed_batch)

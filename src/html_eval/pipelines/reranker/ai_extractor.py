@@ -1,103 +1,39 @@
 
 import polars as pl
-from abc import ABC, abstractmethod
 import os
 import math
 import threading
 from typing import Any, Dict, List, Optional
 import torch
-from html_eval.experiment import Experiment
-from lxml import html
-import json
-from json_repair import repair_json
-import re
-from bs4 import BeautifulSoup, Tag, NavigableString
-from typing import Optional
-from rapidfuzz import fuzz, process
+from html_eval.core.experiment import Experiment
+from html_eval.configs.pipeline_config import RerankerExtractorConfig
 
-def is_schema(text: str) -> bool:
-    # Case 1: Python dict_keys
-    if text.strip().startswith("dict_keys("):
-        return True
-    
-    # Case 2: Looks like JSON or Python dict
-    if (text.strip().startswith("{") and text.strip().endswith("}")) \
-       or (text.strip().startswith("[") and text.strip().endswith("]")):
-        try:
-            json.loads(text)  # if it's valid JSON
-            return True
-        except Exception:
-            return True  # maybe Python dict-like, not strict JSON
-    
-    # Case 3: Contains lots of colons/commas (schema-like pattern)
-    if len(re.findall(r":", text)) >= 2:
-        return True
-    
-    return False
+            
+class AIExtractor:
 
-
-
-class AIExtractor(ABC):
-    def __init__(self, llm_client: Any, prompt_template: str):
-        """
-        Abstract base class for extractors that use an LLM to extract 
-        structured information from a dataset.
-
-        Args:
-            llm_client (Any): An instance of a class that implements the LLMClient interface.
-            prompt_template (str): Template for generating prompts for the LLM.
-                                   Should contain placeholders for dynamic content.
-                                   Example: 
-                                   "Extract the following information: {content} based on schema: {schema}"
-        """
-        self.llm_client = llm_client
-        self.prompt_template = prompt_template
-        self.experiment = None  # Placeholder for experiment instance
-
-    def set_experiment(self, experiment: Experiment) -> None:
-        """
-        Set the experiment instance for logging or other purposes.
-        """
-        self.experiment = experiment
+    def __init__(self, config: RerankerExtractorConfig):
         
-    @abstractmethod
-    def extract(self, df: pl.DataFrame) -> pl.DataFrame:
-        """
-        Abstract method to extract structured information from the given Polars DataFrame.
+        self.config = config
 
-        Args:
-            df (pl.DataFrame): The input Polars DataFrame containing raw content.
+        self.llm_client = self.config.llm_config.create_llm_client()
+        self.prompt_template = self.config.generation_prompt_template
+        self.model_name: str = self.config.reranker_huggingface_model
+        self.max_length = self.config.reranker_max_prompt_length
+        self.default_top_k = self.config.reranker_default_top_k 
+        
+        self.vllm_kwargs = {
+            "tensor_parallel_size": self.config.reranker_tensor_parallel_size if self.config.reranker_tensor_parallel_size is not None else torch.cuda.device_count(),
+            "quantization": self.config.reranker_quantization,
+            "gpu_memory_utilization": self.config.reranker_gpu_memory_utilization,
+            "max_model_len": self.config.reranker_max_total_length,
+            "enable_prefix_caching": self.config.reranker_enable_prefix_caching,
+        }
 
-        Returns:
-            pl.DataFrame: A Polars DataFrame containing structured information.
-        """
-        pass
-    
-class RerankerExtractor(AIExtractor, ABC):
-    """
-    Reranker that loads a vLLM-based reranker model in-process and uses it
-    to score passages for each query. Returns a Polars DataFrame with columns:
-      ["query", "passage", "score", "rank"]
-    NOTE: Prompt template should has placeholders for "query" and "content".
-    """
+        self.classification_prompt_template = self.config.classification_prompt_template
+        self.reranker_classification_threshold = self.config.reranker_classification_threshold
 
-    def __init__(self, llm_client: Any, prompt_template: str, config: Optional[Dict[str, Any]] = None):
-        super().__init__(llm_client, prompt_template)
-        self.config = config.copy() if config else {}
-        # default model (override via config["model_name"])
-        self.model_name: str = self.config.get("model_name", "abdo-Mansour/Qwen3-Reranker-0.6B-HTML")
-        # max token cap (same as server)
-        self.max_length = self.config.get("max_length", 8192)
-        # top_k returned per query (None => return all)
-        self.default_top_k = self.config.get("top_k", None)
-        # GPU / vllm options
-        self.vllm_kwargs = self.config.get("vllm_kwargs", {
-            "tensor_parallel_size": torch.cuda.device_count(),
-            "quantization": "bitsandbytes",  # optional
-            "gpu_memory_utilization": 0.7,
-            "max_model_len": 2048,
-            "enable_prefix_caching": True,
-        })
+
+
         # placeholders to be set by _load_reranker
         self.tok = None
         self.llm = None
@@ -109,6 +45,10 @@ class RerankerExtractor(AIExtractor, ABC):
 
         # load the reranker model/tokenizer into memory
         self._load_reranker()
+
+    def set_experiment(self, experiment: Experiment ):
+        self.experiment = experiment
+        
 
     def _load_reranker(self):
         """
@@ -161,18 +101,7 @@ class RerankerExtractor(AIExtractor, ABC):
         Build the chat-style templates for each passage (list-of-templates).
         Returns list of templates matching the vLLM chat API shape used in your server.
         """
-        INST = (
-            "You are a precision HTML content reranker. Your task is to evaluate HTML chunks "
-            "for their potential to populate a given schema with meaningful data.\n\n"
-            "## Core Objective:\n"
-            "Score HTML content based on its likelihood to contain extractable information "
-            "that matches the target schema requirements.\n\n"
-            "## Instructions:\n"
-            "1. Content Analysis: Examine the HTML chunk's text content, attributes, and semantic structure\n"
-            "2. Schema Mapping: Assess how well the content aligns with schema field requirements\n"
-            "3. Information Density: Evaluate the quantity and quality of extractable data\n"
-            "4. Relevance Scoring: Assign a binary relevance score based on extraction potential\n"
-        )
+        INST = self.classification_prompt_template
 
         def _format(q: str, d: str):
             return [
@@ -242,10 +171,11 @@ class RerankerExtractor(AIExtractor, ABC):
     def _generate_output(self, batch: pl.DataFrame) -> pl.DataFrame:
         # Group by doc_id and concatenate chunks, while preserving the query column
         # print(f"BATCH SHAPE {batch.shape}")
-        df_grouped = batch.group_by("doc_id",maintain_order=True).agg([
-            pl.concat_str("chunkcontent", separator="\n").alias("full_content"),
-            pl.col("query").first().alias("query")  # Preserve the query column
-        ])
+        print(f"Columns: {batch.columns}")
+        df_grouped = batch.group_by("doc_id", maintain_order=True).agg(
+            [pl.col(col).first() for col in batch.columns if col not in ("chunkcontent", "doc_id",'chunkid', 'score', 'score_norm')]
+            + [pl.concat_str("chunkcontent", separator="\n").alias("full_content")]
+        )
         # print(f"GROUPED BATCH SHAPE {df_grouped.shape}")
         # Create the prompt using the prompt template
         df_prompt = df_grouped.with_columns(
@@ -267,65 +197,6 @@ class RerankerExtractor(AIExtractor, ABC):
         print(df_response)
         return df_response
 
-
-    #FIXME: think for a bit 
-    def _extract_exact_target(self, df: pl.DataFrame) -> pl.DataFrame:
-        def process_row(full_content: list[str], response: str , query: str):
-            try:
-                if "```json" in response:
-                    try:
-                        response_json = response.split("```json", 1)[1].split("```", 1)[0]
-                    except Exception:
-                        response_json = response
-
-                # fallback: try to capture the first {...} block
-                if "{" in response_json and "}" in response_json:
-                    start_index = response_json.find("{")
-                    end_index = response_json.rfind("}") + 1
-                    response_json = response_json[start_index:end_index]
-
-                repaired = repair_json(response_json)
-                response_json = json.loads(repaired)
-            except Exception:
-                raise ValueError(f"incorrect json format {response} , type of response ({type(response)})")
-            print(f"Full Content: {full_content}")
-            print(f"Preprocessed Response JSON: {response_json}")
-            
-            results = {}
-            is_query_schema = is_schema(query)
-            for key, value in response_json.items():
-                if not value:
-                    continue
-
-                # YES or NO
-            
-                candidates = []
-                for html_chunk in full_content:
-                    candidates.append(find_best_match(html_chunk, str(value)))
-                    
-
-                if not is_query_schema:
-                    key = 'answer'
-
-                results[key] = best_match if best_match else value
-            print(f"Extracted Targets: {results}")
-            # turn it back to json string 
-            results = json.dumps(results)
-            return results
-        print(f"Phase 0 {df}")
-        print(f'Phase 1 {df.with_columns(pl.struct(["full_content", "response", "query"]))}')
-        print("Phase2:", df.with_columns(
-            pl.struct(["full_content", "response","query"])
-            .map_elements(lambda row: process_row(row["full_content"], row["response"], row["query"]))
-            .alias("response")
-        ))
-
-        return df.with_columns(
-            pl.struct(["full_content", "response","query"])
-            .map_elements(lambda row: process_row(row["full_content"], row["response"], row["query"]))
-            .alias("response")
-        )
-
   
     
     def extract(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -334,21 +205,16 @@ class RerankerExtractor(AIExtractor, ABC):
         # Format the input Dataframe
         processed = []
         for row in df.iter_rows(named=True):
-            for chunk in row['content']['chunks']:
+            for chunk in row['chunks']:
                 processed += self._format_templates(row['query'], [chunk['chunkcontent']])
         print(f"Shape before: classify {df.shape} ")
         # Score the passages
         scores = self._classify(processed)
         print(f"Shape before: new DF {df.shape} ")
 
-        # Create a new DataFrame with the results
-        expanded_df = df.with_columns(
-            pl.col("content").struct.field("chunks").alias("chunks")
-        )
-        print(f"Shape before: explode {expanded_df.shape} ")
 
         # Step 2: explode the list into multiple rows
-        expanded_df = expanded_df.explode("chunks")
+        expanded_df = df.explode("chunks")
         print(f"Shape before: unnest {expanded_df.shape} ")
 
         # Step 3: unnest the struct inside the list
@@ -368,13 +234,12 @@ class RerankerExtractor(AIExtractor, ABC):
         print(f"Shape before: filter {norm_df.shape} ")
 
         # Filter the DataFrame based on the score threshold
-        filtered_df = self._filter(norm_df, threshold=0.5)
+        filtered_df = self._filter(norm_df, threshold=self.reranker_classification_threshold)
         print(f"Shape before: generates {filtered_df.shape} ")
 
         generated_df = self._generate_output(filtered_df)
         print(f"Shape before: extract exact {filtered_df.shape} ")
 
-        # final_df = self._extract_exact_target(generated_df)
         final_df = generated_df
 
         return final_df 

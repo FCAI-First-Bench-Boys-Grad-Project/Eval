@@ -245,7 +245,7 @@ class VLLMClient(LLMClient):
             max_tokens=kwargs.get("max_tokens", self.max_tokens),
             stop=kwargs.get("stop", self.stop_sequences),
             # Add any other SamplingParams you want to control
-            n=kwargs.get("n", 1),
-            frequency_penalty=kwargs.get("frequency_penalty", 0.0),
-            presence_penalty=kwargs.get("presence_penalty", 0.0),
+            # n=kwargs.get("n", 1),
+            # frequency_penalty=kwargs.get("frequency_penalty", 0.0),
+            # presence_penalty=kwargs.get("presence_penalty", 0.0),
         )

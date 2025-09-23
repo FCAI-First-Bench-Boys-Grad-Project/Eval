@@ -1,7 +1,7 @@
 # src/eval/__init__.py
 
 from .core.experiment import Experiment
-from .core.evaluator import Evaluator
+from .eval.evaluator import Evaluator
 
 # You can also expose submodules
 from .html_datasets.websrc import WebSrcDataset

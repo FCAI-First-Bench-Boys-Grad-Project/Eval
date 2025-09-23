@@ -2,9 +2,9 @@ from typing import Optional, Dict, Any
 import polars as pl
 from html_eval.configs.experiment_config import ExperimentConfig 
 from html_eval.pipelines.base_pipeline import BasePipeline
-from html_eval import Evaluator
-from html_eval.html_datasets.base import BaseHTMLDataset
-from html_eval.util.seed import set_seed
+from html_eval.eval.evaluator import Evaluator
+from html_eval.html_datasets.base_html_dataset import BaseHTMLDataset
+from html_eval.util.seed_util import set_seed
 from tqdm.auto import tqdm
 from math import ceil
 
@@ -13,18 +13,17 @@ from math import ceil
 
 class Experiment:
     def __init__(self,config: ExperimentConfig):
-        self._config = config
+        self._config: ExperimentConfig = config
         
         set_seed(self._config.seed)
         self.data: BaseHTMLDataset = config.dataset_config.create_dataset()
-
-        self.pipeline  = pipeline
-        self.evaluator = evaluator
+        self.pipeline: BasePipeline = config.pipeline_config.create_pipeline()
+        self.evaluator: Evaluator = Evaluator(evaluation_metrics=self._config.dataset_config.evaluation_metrics)
         
         # Connecting the Modules to the Experiment
         self.pipeline.set_experiment(self)
+        self.data.set_experiment(self)
         self.evaluator.set_experiment(self)
-        # self.data.set_experiment(self)
         # TODO MLflow
     
     # @app.task
@@ -38,7 +37,6 @@ class Experiment:
         set_seed(42)  # For reproducibility
 
         predictions = []
-        ground_truths = []
 
         if batch_size is not None and hasattr(self.data, 'batch_iterator'):
             iterator = self.data.batch_iterator(batch_size=batch_size, shuffle=shuffle)
@@ -47,36 +45,17 @@ class Experiment:
 
         # tqdm wrapper — leave total=None if you don’t know dataset length
         for batch in tqdm(iterator, desc="Running Experiment", unit="batch", total=ceil(getattr(self.data, "__len__", lambda: None)()/ batch_size if batch_size else 1)):
-            if isinstance(batch, list):
-                html, query, gt = zip(*batch)
-            else:
-                html, query, gt = batch
-
-            # Turn html and query into a polars DataFrame
-            batch_df = pl.DataFrame({
-                'html': html,
-                'query': query
-            })
-
-            # FIXME: Robustness against failure and failed indexes
-            # print(f"Batch Shape {batch_df.shape}")
-            pred = self.pipeline.extract(batch_df)
+            
+            pred = self.pipeline.extract(batch)
             
             predictions.extend(pred)
-            ground_truths.extend(gt)
             
 
-        # print("Predictions")
-        # print(predictions)
-        # print("GT")
-        # print(ground_truths)
+        print("Predictions")
+        print(predictions)
+        
         
         # TODO MLFlow
-        print("Please Tell me this is not where the problem is")
-        # print(f"Predictions Length: {pl.Series(predictions)}")
-        # print(f"Ground Truths Length: {pl.Series(ground_truths)}")
-        
 
-        ground_truths = pl.Series(ground_truths)
-        results  = self.evaluator.evaluate(pl.Series(predictions,dtype=pl.Object), pl.Series(ground_truths))
-        return predictions , ground_truths , results
+        results  = self.evaluator.evaluate(predictions)
+        return predictions , results

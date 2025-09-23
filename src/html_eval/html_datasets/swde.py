@@ -1,4 +1,5 @@
-from html_eval.html_datasets.base import BaseHTMLDataset , Sample
+from html_eval.html_datasets.base_html_dataset import BaseHTMLDataset
+from html_eval.core.types import Sample
 from html_eval.configs.dataset_config import SWDEConfig
 from typing import List
 from datasets import load_dataset
@@ -20,6 +21,8 @@ class SWDEDataset(BaseHTMLDataset):
         super().__init__(config=config)
 
         self._domain = config.domain
+        self.data_source_path = config.data_source_path
+        self.html_source_path = config.html_source_path
 
         # Load all subsets (domains) and combine into a single DatasetDict
         try:
@@ -69,9 +72,9 @@ class SWDEDataset(BaseHTMLDataset):
 
         if not os.path.isfile(file_path):
             print(f"HTML file not found for id {row['website_id']} at path: {file_path}")
-            return Sample({
+            return Sample(**{
                 "id": row['website_id'],
-                "html_content": None,
+                "content": None,
                 "query": row['schema'],
                 "ground_truth": row['gt']
             })
@@ -80,9 +83,9 @@ class SWDEDataset(BaseHTMLDataset):
             html = file.read()
 
         # Access the HTML content based on the domain and id
-        return Sample({
+        return Sample(**{
             "id": row['website_id'],
-            "html_content": html,
+            "content": html,
             "query": row['schema'],
             "ground_truth": row['gt']
         })

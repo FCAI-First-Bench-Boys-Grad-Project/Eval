@@ -1,4 +1,5 @@
-from html_eval.html_datasets.base import BaseHTMLDataset , Sample
+from html_eval.html_datasets.base_html_dataset import BaseHTMLDataset
+from html_eval.core.types import Sample
 from html_eval.configs.dataset_config import WebSrcConfig
 import polars as pl
 
@@ -53,9 +54,9 @@ class WebSrcDataset(BaseHTMLDataset):
             (pl.col('id').cast(pl.Int32) == website_id)
         )
         
-        return Sample({
+        return Sample(**{
             "id": row['id'],
-            "html_content": html_row_df['html'][0] if not html_row_df.is_empty() else None,
+            "content": html_row_df['html'][0] if not html_row_df.is_empty() else None,
             "query": row['question'],
             "ground_truth": row['answer']
         })

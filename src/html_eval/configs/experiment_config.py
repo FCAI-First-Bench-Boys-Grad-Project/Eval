@@ -5,9 +5,9 @@ from html_eval.configs.dataset_config import BaseDatasetConfig
 @dataclass
 class ExperimentConfig:
     experiment_name: str
-    seed: int = 42
     pipeline_config: BasePipelineConfig
     dataset_config: BaseDatasetConfig
+    seed: int = 42
 
     def __post_init__(self):
         if self.experiment_name.strip() == "":
@@ -27,5 +27,7 @@ class ExperimentConfig:
             "pipeline_config": self.pipeline_config,
             "dataset_config": self.dataset_config,
         }
+    
+
 
     

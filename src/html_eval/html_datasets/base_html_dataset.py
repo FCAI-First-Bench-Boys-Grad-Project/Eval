@@ -1,37 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterator, List, Optional
 from html_eval.configs.dataset_config import BaseDatasetConfig
-
-
-
-class Sample(dict):
-    """
-    A single sample from the dataset.
-    Acts like both a dict and an object with attributes.
-    """
-    id: str
-    html_content: str
-    query: str
-    ground_truth: str
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.__dict__.update(kwargs)
-
-    def __getitem__(self, key):
-        # tuple-style indexing (by position)
-        if isinstance(key, int):
-            return list(self.values())[key]
-        return super().__getitem__(key)
-
-    def __setitem__(self, key, value):
-        super().__setitem__(key, value)
-        self.__dict__[key] = value  # keep attributes in sync
-
-    def __setattr__(self, key, value):
-        super().__setitem__(key, value)
-        super().__setattr__(key, value)
-
+from html_eval.core.types import Sample
 
 class BaseHTMLDataset(ABC):
     def __init__(self, config: BaseDatasetConfig):
@@ -45,6 +15,9 @@ class BaseHTMLDataset(ABC):
         self._indices: Optional[List[int]] = config.indices
         self.evaluation_metrics: List[str] = config.evaluation_metrics
 
+    def set_experiment(self, experiment):
+        self.experiment = experiment
+        
     @abstractmethod
     def _get_total_length(self) -> int:
         """Return total number of samples in the dataset (before subsetting)."""
@@ -62,7 +35,7 @@ class BaseHTMLDataset(ABC):
     def __getitem__(self, idx: int) -> Sample:
         """Return item, respecting subset if defined."""
         if idx < 0 or idx >= self._get_total_length():
-            raise IndexError("Index out of bounds")
+            raise IndexError(f"Index {idx} out of bounds")
         real_idx = self._indices[idx] if self._indices is not None else idx
         return self._get_item(real_idx)
 
@@ -82,7 +55,8 @@ class BaseHTMLDataset(ABC):
             random.shuffle(indices)
 
         for i in range(0, len(indices), batch_size):
-            yield [self[j] for j in indices[i:i+batch_size]]
+            # yield [self[j] for j in indices[i:i+batch_size]]
+            yield [self[k] for k in range(i, min(i + batch_size, len(indices)))]
 
     def subset(self, indices: List[int]) -> "BaseHTMLDataset":
         """Return a new dataset object restricted to the given indices."""

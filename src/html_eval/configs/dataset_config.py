@@ -30,8 +30,8 @@ class SWDEConfig(BaseDatasetConfig):
             raise ValueError(f"No HTML folder files found in the directory: {self.html_source_path}. Please ensure to unzip the files.")
 
     def create_dataset(self):
-        from html_eval.html_datasets.swde import SWDEHTMLDataset
-        return SWDEHTMLDataset(self)
+        from html_eval.html_datasets.swde import SWDEDataset
+        return SWDEDataset(self)
 
 @dataclass
 class WebSrcConfig(BaseDatasetConfig):
@@ -53,8 +53,8 @@ class WebSrcConfig(BaseDatasetConfig):
             raise FileNotFoundError(f"Data source file not found: {self.data_source_path}")
 
     def create_dataset(self):
-        from html_eval.html_datasets.websrc import WebSrcHTMLDataset
-        return WebSrcHTMLDataset(self)
+        from html_eval.html_datasets.websrc import WebSrcDataset
+        return WebSrcDataset(self)
 
 
 

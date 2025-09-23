@@ -1,139 +1,97 @@
-# postprocessor_polars.py
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from typing import Iterable, List, Optional , Union
-import json
-from json_repair import repair_json
-import polars as pl
+from typing import Iterable, List, Optional, Dict, Any, Union
 import os
-from html_eval.experiment import Experiment
+import polars as pl
+
+from html_eval.util.json_util import extract_and_repair_json
+from html_eval.core.types import SamplePrediction
 
 
-
-def _extract_and_repair_json(response: Union[str,dict]) -> dict:
-    """
-    Worker function for processing a single LLM response.
-    Returns a dict (empty dict on error). Top-level function for pickling.
-    """
-    if response is None:
-        return {}
-    
-    if isinstance(response, dict):
-        return response  # already a dict
+# module-level so ProcessPoolExecutor can pickle it
+def _safe_extract(response: str) -> Dict[str, Any]:
     try:
-        json_string = response
-
-        # common fenced codeblock ```json ... ```
-        if "```json" in response:
-            try:
-                json_string = response.split("```json", 1)[1].split("```", 1)[0]
-            except Exception:
-                json_string = response
-
-        # fallback: try to capture the first {...} block
-        if "{" in json_string and "}" in json_string:
-            start_index = json_string.find("{")
-            end_index = json_string.rfind("}") + 1
-            json_string = json_string[start_index:end_index]
-
-        repaired = repair_json(json_string)
-        parsed = json.loads(repaired)
-
-        print('-'*80)
-        print(f"Original Response: {response}")
-        print(f"Parsed JSON: {parsed}")
-        print('-'*80)
-
-        # Checking if the parsed JSON just contains a single key "answer"
-        if isinstance(parsed, dict) and len(parsed) == 1 and "answer" in parsed:
-            # If it does, we can return it directly
-            return parsed['answer']
-        return parsed
-    except Exception:
-        return {}
+        return extract_and_repair_json(response)
+    except Exception as e:
+        return {"__error__": f"[PARSE_ERROR] {e}"}
 
 
 class PostProcessor:
-    def __init__(self):
-        self.experiment = None 
-    
-    def set_experiment(self, experiment: Experiment) -> None:
-        """
-        Set the experiment instance for logging or other purposes.
-        """
-        self.experiment = experiment
+    """Minimal PostProcessor that turns response strings into SamplePrediction objects."""
 
-    def process(self, response: str) -> dict:
-        """Single response, backward-compatible."""
-        return _extract_and_repair_json(response)
+    def process(self, response: str, **meta: Any) -> SamplePrediction:
+        """Process one response and wrap result in SamplePrediction."""
+        parsed = _safe_extract(response)
+        return SamplePrediction(prediction=parsed, **meta)
 
     def process_responses(
         self,
         responses: Iterable[str],
+        metas: Optional[Iterable[Dict[str, Any]]] = None,
         n_workers: Optional[int] = None,
-        use_process: bool = True,
-        chunksize: int = 1,
-        show_progress: bool = True,
-    ) -> List[dict]:
+        use_process: bool = False,
+    ) -> List[SamplePrediction]:
         """
-        Process an iterable of response strings in parallel and return a list of dicts.
+        Parse many responses in parallel and return SamplePrediction list.
+        - metas: optional per-response dicts (e.g. {'id':..., 'query':..., 'ground_truth':...})
+        - use_process: if True uses ProcessPoolExecutor (workers must be picklable)
         """
         responses = list(responses)
+        if metas is None:
+            metas = [{} for _ in responses]
+        else:
+            metas = list(metas)
+
+        if len(metas) != len(responses):
+            raise ValueError("Length of metas must match length of responses")
+
         if n_workers is None:
             n_workers = max(1, (os.cpu_count() or 2) - 1)
 
         Executor = ProcessPoolExecutor if use_process else ThreadPoolExecutor
 
-        use_tqdm = show_progress
-        if use_tqdm:
-            try:
-                from tqdm.auto import tqdm
-            except Exception:
-                use_tqdm = False
-
-        results: List[dict]
         with Executor(max_workers=n_workers) as ex:
-            if use_tqdm:
-                it = ex.map(_extract_and_repair_json, responses, chunksize=chunksize)
-                results = [r for r in tqdm(it, total=len(responses))]
-            else:
-                results = list(ex.map(_extract_and_repair_json, responses, chunksize=chunksize))
-
-        return results
+            parsed_iter = ex.map(_safe_extract, responses)
+            return [SamplePrediction(prediction=parsed, **meta) for parsed, meta in zip(parsed_iter, metas)]
 
     def process_dataframe(
         self,
         df: pl.DataFrame,
         response_col: str = "response",
-        result_col: str = "json",
+        id_col: str = "id",
+        query_col: str = "query",
+        gt_col: str = "ground_truth",
         n_workers: Optional[int] = None,
-        use_process: bool = True,
-        chunksize: int = 1,
-        show_progress: bool = False,
-    ) -> pl.DataFrame:
+        use_process: bool = False,
+        return_polars: bool = False,
+    ) -> Union[List[SamplePrediction], pl.DataFrame]:
         """
-        Process responses in a Polars DataFrame and return a new DataFrame
-        with a Struct column containing the parsed JSON.
+        Parse the responses in `df[response_col]`.
+        Returns either a list of SamplePrediction (default) or the input DataFrame with a new
+        'prediction' column (if return_polars=True).
         """
-        if not isinstance(df, pl.DataFrame):
-            raise TypeError("df must be a polars.DataFrame")
-
         if response_col not in df.columns:
-            raise KeyError(f"response_col '{response_col}' not in dataframe columns: {df.columns}")
+            raise KeyError(f"response_col '{response_col}' not present")
 
         responses = df[response_col].to_list()
-        dict_results = self.process_responses(
+        metas = []
+        # collect minimal meta fields if present
+        for row in df.iter_rows(named=True):
+            metas.append({
+                "id": row.get(id_col),
+                "query": row.get(query_col),
+                "ground_truth": row.get(gt_col),
+            })
+
+        preds = self.process_responses(
             responses,
+            metas=metas,
             n_workers=n_workers,
             use_process=use_process,
-            chunksize=chunksize,
-            show_progress=show_progress,
         )
 
-        # Convert list of dicts to a Polars Struct column
-        # struct_series = pl.Series(result_col, dict_results).cast(pl.Struct(dict_results[0] if dict_results else {}))
-        # df_out = df.with_columns(struct_series)
+        if not return_polars:
+            return preds
 
-        # return df_out
-
-        return dict_results
-
+        # add 'prediction' column to DataFrame (preserves order)
+        pred_values = [p.prediction for p in preds]
+        return df.with_columns(pl.Series("prediction", pred_values))
