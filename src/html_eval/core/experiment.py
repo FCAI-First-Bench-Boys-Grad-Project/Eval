@@ -42,6 +42,7 @@ class Experiment:
             iterator = self.data.batch_iterator(batch_size=batch_size, shuffle=shuffle)
         else:
             iterator = iter(self.data)
+        # quick check
 
         # tqdm wrapper — leave total=None if you don’t know dataset length
         for batch in tqdm(iterator, desc="Running Experiment", unit="batch", total=ceil(getattr(self.data, "__len__", lambda: None)()/ batch_size if batch_size else 1)):
