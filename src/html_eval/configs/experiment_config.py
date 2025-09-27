@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from html_eval.configs.pipeline_config import BasePipelineConfig
 from html_eval.configs.dataset_config import BaseDatasetConfig
 
@@ -7,6 +7,7 @@ class ExperimentConfig:
     experiment_name: str
     pipeline_config: BasePipelineConfig
     dataset_config: BaseDatasetConfig
+    output_dir: str = "outputs"
     seed: int = 42
 
     def __post_init__(self):
@@ -21,13 +22,13 @@ class ExperimentConfig:
         
 
     def to_dict(self) -> dict:
+        """
+        Correctly converts the entire experiment configuration into a
+        JSON-serializable dictionary by calling .to_dict() on nested objects.
+        """
         return {
             "experiment_name": self.experiment_name,
             "seed": self.seed,
-            "pipeline_config": self.pipeline_config,
-            "dataset_config": self.dataset_config,
+            "pipeline_config": self.pipeline_config.to_dict(), 
+            "dataset_config": self.dataset_config.to_dict(),   
         }
-    
-
-
-    

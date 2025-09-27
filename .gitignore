@@ -5,3 +5,9 @@ data/
 *.html
 eval.egg-info/
 ignore*
+wandb/
+mlruns/
+checkpoints/
+outputs/
+output/
+test*

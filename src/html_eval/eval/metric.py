@@ -55,6 +55,23 @@ class TokenF1(Metric):
     def name(self) -> str:
         return "token_f1"
     
+    def _normalize_into_string(self,value: Any) -> str:
+        """
+        Normalize any input into a string to avoid Polars dtype issues.
+        - None -> ""
+        - dict/list -> JSON string
+        - everything else -> str()
+        """
+        if value is None:
+            return ""
+        if isinstance(value, (dict, list)):
+            import json
+            try:
+                return json.dumps(value, ensure_ascii=False)
+            except Exception:
+                return str(value)
+        return str(value)
+    
     def calculate(self,predictions:List[SamplePrediction]) -> Dict[str, Any]:
         """
         Calculate token-level F1 score for SQuAD-style answers.
@@ -65,6 +82,16 @@ class TokenF1(Metric):
             f1, prec, rec = compute_f1_squad(a_gold, a_pred)
             return {"f1": f1, "precision": prec, "recall": rec}
 
+        # Convert predictions to Polars DataFrame
+        predictions = [
+            SamplePrediction(
+                id=pred.id,
+                query=pred.query,
+                ground_truth=pred.ground_truth,
+                prediction=self._normalize_into_string(pred.prediction)
+            ) for pred in predictions
+            ]
+        
         pred_df = pl.DataFrame(predictions)
         
         rows = zip(pred_df["prediction"].cast(pl.Utf8),pred_df["ground_truth"].cast(pl.Utf8))

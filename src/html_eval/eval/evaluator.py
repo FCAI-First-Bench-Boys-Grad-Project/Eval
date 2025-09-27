@@ -34,8 +34,8 @@ class Evaluator:
         self.experiment = experiment
 
     def evaluate(self, predictions: List[SamplePrediction]) -> Dict[str, Any]:
-        if not is_not_null(predictions):
-            raise ValueError("Both pred and gt must contain non-null values")
+        # if not is_not_null(predictions):
+        #     raise ValueError("Both pred and gt must contain non-null values")
         
         print("I swear if the problem is from here I will fruck you up")
         print("Pred: ", predictions)
