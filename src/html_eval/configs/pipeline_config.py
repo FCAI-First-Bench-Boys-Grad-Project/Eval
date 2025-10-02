@@ -44,6 +44,7 @@ class RerankerPreprocessorConfig:
 
     chunk_size: int = 500
     attr_cutoff_len: int = 5
+    disable_chunking: bool = False
 
     def __post_init__(self):
         self.fetch_workers = (
@@ -66,6 +67,7 @@ class RerankerExtractorConfig:
     classification_prompt_template: str
     generation_prompt_template: str
 
+    disable_reranker: bool = False
     reranker_huggingface_model: str = "abdo-Mansour/Qwen3-Reranker-0.6B-HTML"
     reranker_max_prompt_length: int = 8192
     reranker_max_total_length: int = 2048
@@ -106,12 +108,20 @@ class RerankerPipelineConfig(BasePipelineConfig):
     preprocessor_config: RerankerPreprocessorConfig
     extractor_config: RerankerExtractorConfig
     postprocessor_config: RerankerPostprocessorConfig
+    disable_method: bool = False 
     name: str = "reranker"
+
+    def __post_init__(self):
+        if self.disable_method:
+            self.preprocessor_config.disable_chunking = True
+            self.extractor_config.disable_reranker = True
 
     def create_pipeline(self):
         from html_eval.pipelines.reranker.pipeline import RerankerPipeline
 
         return RerankerPipeline(self)
+    
+    
 
 
 

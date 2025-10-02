@@ -28,10 +28,13 @@ def _chunk_worker(args: tuple) -> Dict[str, Any]:
     try:
         if not cleaned_text:
             return {'doc_id': idx, 'chunks': [{'chunkid': f"{idx}-err", 'chunkcontent': '[Chunk Worker ERROR] empty content or fetch failed'}]}
-        chunks = chunk_html_content(html_content=cleaned_text,
-                                    max_tokens=config.chunk_size,
-                                    is_clean=config.use_clean_chunker,
-                                    attr_cutoff_len=config.attr_cutoff_len)
+        if config.disable_chunking:
+            chunks = [cleaned_text]
+        else:
+            chunks = chunk_html_content(html_content=cleaned_text,
+                                        max_tokens=config.chunk_size,
+                                        is_clean=config.use_clean_chunker,
+                                        attr_cutoff_len=config.attr_cutoff_len)
         
         chunks_list = [{'chunkid': f"{idx}-{i+1}", 'chunkcontent': c} for i, c in enumerate(chunks)]
         return {'doc_id': idx, 'chunks': chunks_list}

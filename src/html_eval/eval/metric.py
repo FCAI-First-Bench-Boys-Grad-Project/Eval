@@ -173,7 +173,7 @@ class Metric(ABC):
 
         path = self._offload_path
         try:
-            with open(path, "a", encoding="utf-8") as f:
+            with open(path, "a", encoding="utf-8") as f:                
                 for entry in self._sample_eval_buffer:
                     obj = self._serialize_sample_eval(entry)
                     f.write(json.dumps(obj, ensure_ascii=False) + "\n")

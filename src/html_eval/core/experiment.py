@@ -55,7 +55,7 @@ class Experiment:
         self.evaluator: Evaluator = Evaluator(
             evaluation_metrics=self._config.dataset_config.evaluation_metrics,
             #TODO: needs to be parameters
-            sample_eval_offload_every=10,
+            sample_eval_offload_every=1,
             sample_eval_resume=resume,
             sample_eval_offload_dir=self._metric_dir
         )
@@ -273,12 +273,12 @@ class Experiment:
 
                         self._append_predictions_to_file(pred, pred_f)
 
-                        # if hasattr(self.evaluator, "update"):
-                        #     try:
-                        #         #TODO: first evaluator call
-                        #         results = self.evaluator.update(pred)
-                        #     except Exception as e:
-                        #         print(f"[Experiment] Evaluator update() failed: {e}")
+                        if hasattr(self.evaluator, "update"):
+                            try:
+                                #TODO: first evaluator call
+                                results = self.evaluator.update(pred)
+                            except Exception as e:
+                                print(f"[Experiment] Evaluator update() failed: {e}")
 
                         self._progress["last_batch"] = batch_idx
 
@@ -306,11 +306,8 @@ class Experiment:
 
                 self._save_checkpoint()
 
-                if hasattr(self.evaluator, "evaluate_stream"):
-                    results = self.evaluator.evaluate_stream(self._predictions_iterator())
-                else:
-                    preds = list(self._predictions_iterator())
-                    results = self.evaluator.evaluate(preds)
+                results = self.evaluator.get_final_result()
+
 
                 self._save_results(results)
                 # for metric in self.evaluator.get_metrics():

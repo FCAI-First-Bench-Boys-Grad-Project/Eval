@@ -44,7 +44,8 @@ class AIExtractor:
         self.llm_lock = threading.Lock()
 
         # load the reranker model/tokenizer into memory
-        self._load_reranker()
+        if not self.config.disable_reranker:
+            self._load_reranker()
 
     def set_experiment(self, experiment: Experiment ):
         self.experiment = experiment
@@ -113,6 +114,9 @@ class AIExtractor:
         return templates
 
     def _classify(self, processed_batch: List) -> List[float]:
+        if self.config.disable_reranker:
+            return [1.0] * len(processed_batch)
+        
         if not processed_batch:
             return []
 
@@ -209,6 +213,7 @@ class AIExtractor:
                 processed += self._format_templates(row['query'], [chunk['chunkcontent']])
         # print(f"Shape before: classify {df.shape} ")
         # Score the passages
+
         scores = self._classify(processed)
         # print(f"Shape before: new DF {df.shape} ")
 

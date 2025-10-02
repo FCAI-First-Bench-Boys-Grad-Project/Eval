@@ -114,6 +114,13 @@ class Evaluator:
             batch_res = self.update(batch)
             yield batch_idx, batch_res
 
+    def get_final_result(self) -> Dict[str,Any]:
+        # after consuming entire stream, collect final aggregated values
+        final_results: Dict[str, Any] = {}
+        for metric in self.metrics:
+            final_results[metric.name()] = metric.summary()
+        return final_results
+
     def evaluate_stream(self, predictions: Iterable[SamplePrediction], batch_size: int = 256) -> Dict[str, Any]:
         """
         Consume an iterator of SamplePrediction (e.g. from disk) in batches and
@@ -123,11 +130,7 @@ class Evaluator:
             # we simply consume generator; update already accumulates state in metrics
             pass
 
-        # after consuming entire stream, collect final aggregated values
-        final_results: Dict[str, Any] = {}
-        for metric in self.metrics:
-            final_results[metric.name()] = metric.summary()
-        return final_results
+        return self.get_final_result()
 
     # ---------------- helpers to locate sample-eval files ----------------
     def get_sample_eval_files(self) -> Dict[str, str]:
