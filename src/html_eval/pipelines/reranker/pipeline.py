@@ -17,29 +17,29 @@ class RerankerPipeline(BasePipeline):
         self.extractor = AIExtractor(config=self.config.extractor_config)
         self.extractor.set_experiment(self.experiment)
 
-        self.postprocessor = PostProcessor()
+        self.postprocessor = PostProcessor(config=self.config.postprocessor_config)
 
     def extract(self, batch: List[Sample]) -> List[SamplePrediction]:
         """
         Extract information from a batch of content.
         """
         # Preprocess the batch
-        print(f"Batch PrePrecessing: {batch}")
-        print('='*80)
+        # print(f"Batch PrePrecessing: {batch}")
+        # print('='*80)
         preprocessed_batch = self.preprocessor.process(batch)
-        print(f"++++++++++EXPERIMENT Preprocessed Batch: {preprocessed_batch}")
-        print('='*80)
+        # print(f"++++++++++EXPERIMENT Preprocessed Batch: {preprocessed_batch}")
+        # print('='*80)
         # Extract using AIExtractor
         extracted_data = self.extractor.extract(preprocessed_batch)
-        print(f"Extracted Data: {extracted_data}")
-        print(f"Extracted Data Type: {extracted_data['response']}")
-        print('='*80)
+        # print(f"Extracted Data: {extracted_data}")
+        # print(f"Extracted Data Type: {extracted_data['response']}")
+        # print('='*80)
         
         # Post-process the extracted data
         postprocessed_data = self.postprocessor.process_dataframe(extracted_data)
-        print(f"Postprocessed Data: {postprocessed_data}")
-        print(f"Postprocessed Data Type: {type(postprocessed_data)}")
-        print('='*80)
+        # print(f"Postprocessed Data: {postprocessed_data}")
+        # print(f"Postprocessed Data Type: {type(postprocessed_data)}")
+        # print('='*80)
         return postprocessed_data
         
 

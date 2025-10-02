@@ -7,6 +7,7 @@ from typing import Any, List, Optional
 import html
 import textwrap
 from html_eval.util.eval_util import is_not_null
+from html_eval.util.html_util import normalize_text
 
 # Try to use rapidfuzz (faster) else fallback to fuzzywuzzy
 try:
@@ -81,17 +82,21 @@ class Matcher:
         Return True if pred matches any gt candidate.
         Exact match by default, fuzzy if configured.
         """
-        if not is_not_null(pred):
-            return False
+        # if not is_not_null(pred):
+        #     return False
         candidates = self._normalize_gt(gt)
         if not candidates:
+            if not is_not_null(pred):
+                return True
             return False
-        pred_s = str(pred)
+        
+        pred_s = normalize_text(str(pred))
+        
         if self.cfg.is_fuzzy:
             threshold = max(0, min(100, self.cfg.fuzzy_threshold))
             for c in candidates:
                 try:
-                    cs = str(c)
+                    cs = normalize_text(str(c))
                     if _HAS_RAPIDFUZZ:
                         score = _rfuzz.ratio(cs.lower(), pred_s.lower())
                     else:
@@ -109,7 +114,7 @@ class Matcher:
                 if isinstance(pred, (int, float)) and isinstance(c, (int, float)):
                     if pred == c:
                         return True
-                if str(c) == pred_s:
+                if normalize_text(str(c)) == pred_s:
                     return True
             return False
 

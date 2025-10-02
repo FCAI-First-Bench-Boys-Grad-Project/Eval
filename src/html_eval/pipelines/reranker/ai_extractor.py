@@ -160,18 +160,18 @@ class AIExtractor:
         """
         if 'score_norm' not in batch.columns:
             raise ValueError("Batch must contain 'score' column for filtering.")
-        print(f"SHAPE BEFORE FILTER {batch.shape}")
-        print(batch)
+        # print(f"SHAPE BEFORE FILTER {batch.shape}")
+        # print(batch)
         filtered_batch = batch.filter(pl.col('score_norm') >= threshold)
-        print(f"SHAPE AFTER FILTER {batch.shape}")
-        print(batch)
+        # print(f"SHAPE AFTER FILTER {batch.shape}")
+        # print(batch)
         return filtered_batch
 
 
     def _generate_output(self, batch: pl.DataFrame) -> pl.DataFrame:
         # Group by doc_id and concatenate chunks, while preserving the query column
         # print(f"BATCH SHAPE {batch.shape}")
-        print(f"Columns: {batch.columns}")
+        # print(f"Columns: {batch.columns}")
         df_grouped = batch.group_by("doc_id", maintain_order=True).agg(
             [pl.col(col).first() for col in batch.columns if col not in ("chunkcontent", "doc_id",'chunkid', 'score', 'score_norm')]
             + [pl.concat_str("chunkcontent", separator="\n").alias("full_content")]
@@ -193,52 +193,52 @@ class AIExtractor:
         df_response = df_prompt.with_columns(
             pl.Series("response", responses, dtype=pl.Utf8)
         )
-        print("Final DataFrame with responses:")
-        print(df_response)
+        # print("Final DataFrame with responses:")
+        # print(df_response)
         return df_response
 
   
     
     def extract(self, df: pl.DataFrame) -> pl.DataFrame:
         
-        print(f"Shape before: format templates {df.shape} ")
+        # print(f"Shape before: format templates {df.shape} ")
         # Format the input Dataframe
         processed = []
         for row in df.iter_rows(named=True):
             for chunk in row['chunks']:
                 processed += self._format_templates(row['query'], [chunk['chunkcontent']])
-        print(f"Shape before: classify {df.shape} ")
+        # print(f"Shape before: classify {df.shape} ")
         # Score the passages
         scores = self._classify(processed)
-        print(f"Shape before: new DF {df.shape} ")
+        # print(f"Shape before: new DF {df.shape} ")
 
 
         # Step 2: explode the list into multiple rows
         expanded_df = df.explode("chunks")
-        print(f"Shape before: unnest {expanded_df.shape} ")
+        # print(f"Shape before: unnest {expanded_df.shape} ")
 
         # Step 3: unnest the struct inside the list
         expanded_df = expanded_df.unnest("chunks")
-        print(f"Shape before: float {expanded_df.shape} ")
+        # print(f"Shape before: float {expanded_df.shape} ")
 
         scores_df = expanded_df.with_columns(
             pl.Series('score', scores, dtype=pl.Float64)
         )
 
-        print(f"Shape before: norm {scores_df.shape} ")
+        # print(f"Shape before: norm {scores_df.shape} ")
 
         # Max normalization of scores for each docid TODO: need to add it do the config
         norm_df = scores_df.with_columns(
             (pl.col("score") / pl.col("score").max().over("doc_id")).alias("score_norm")
         )
-        print(f"Shape before: filter {norm_df.shape} ")
+        # print(f"Shape before: filter {norm_df.shape} ")
 
         # Filter the DataFrame based on the score threshold
         filtered_df = self._filter(norm_df, threshold=self.reranker_classification_threshold)
-        print(f"Shape before: generates {filtered_df.shape} ")
+        # print(f"Shape before: generates {filtered_df.shape} ")
 
         generated_df = self._generate_output(filtered_df)
-        print(f"Shape before: extract exact {filtered_df.shape} ")
+        # print(f"Shape before: extract exact {filtered_df.shape} ")
 
         final_df = generated_df
 

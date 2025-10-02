@@ -46,6 +46,7 @@ class SamplePrediction(dict):
     query: str
     ground_truth: str
     prediction: Union[str, dict]
+    filtered_html: str
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

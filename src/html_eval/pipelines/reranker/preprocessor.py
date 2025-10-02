@@ -121,9 +121,9 @@ class BasePreprocessor:
 
 
         batch_df = pl.DataFrame(batch)
-        print("Preprocessed batch :", batch_df)
-        print("Results :",results)
-        print("With results :",batch_df.hstack(pl.DataFrame(results)))
+        # print("Preprocessed batch :", batch_df)
+        # print("Results :",results)
+        # print("With results :",batch_df.hstack(pl.DataFrame(results)))
         return batch_df.hstack(pl.DataFrame(results))
 
 

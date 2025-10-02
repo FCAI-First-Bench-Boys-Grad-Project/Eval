@@ -25,7 +25,7 @@ def is_schema(text: str) -> bool:
     return False
 
 
-def extract_and_repair_json(response: Union[str,dict]) -> dict:
+def extract_and_repair_json(response: Union[str,dict] , spread_values: False) -> dict:
     """
     Worker function for processing a single LLM response.
     Returns a dict (empty dict on error). Top-level function for pickling.
@@ -54,15 +54,18 @@ def extract_and_repair_json(response: Union[str,dict]) -> dict:
         repaired = repair_json(json_string)
         parsed = json.loads(repaired)
 
-        print('-'*80)
-        print(f"Original Response: {response}")
-        print(f"Parsed JSON: {parsed}")
-        print('-'*80)
-
-        # Checking if the parsed JSON just contains a single key "answer"
-        if isinstance(parsed, dict) and len(parsed) == 1 and "answer" in parsed:
-            # If it does, we can return it directly
-            return parsed['answer']
+        # print('-'*80)
+        # print(f"Original Response: {response}")
+        # print(f"Parsed JSON: {parsed}")
+        # print('-'*80)
+        
+        # For non Schema queries
+        if spread_values:
+            final_parsing = ""
+            for att , val in list(parsed.items()):
+                final_parsing += val
+            return final_parsing
+        
         return parsed
     except Exception:
         return {}
